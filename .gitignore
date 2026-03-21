@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# HWPX 빌드 산출물
+*.hwpx
+
+# Cowork 세션 파일
+COWORK_CONTEXT.md
+PROJECT_INSTRUCTIONS.md
+setup_cowork.sh
+
+# Git 패치
+*.patch
+
+# OS
+.DS_Store

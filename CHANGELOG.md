@@ -72,13 +72,13 @@
 - diff_docs.py 텍스트 diff + 구조 비교 ✅
 
 ### TODO
-- [ ] Git commit + push (로컬 .git/index.lock 해제 필요)
-- [ ] SKILL.md 업데이트 (kcup 템플릿, create_document.py, KCUP 블록 타입 반영)
-- [ ] 두 번째 스타일 작성 (추상화 패턴 검증용)
+- [x] Git commit + push ✅ (8d63b9e, dca6c9b)
+- [x] SKILL.md 업데이트 ✅ (원커맨드, KCUP 블록 타입, auto_spacing 문서화)
+- [x] .gitignore 추가 ✅
 - [ ] 표 셀 병합 실무 문서 추가 검증
 - [ ] 다중 섹션 지원 (L2 돌파)
 - [ ] 이미지 삽입 (L3 돌파)
-- [ ] StyleProfile 분리 (두 번째 스타일 경험 후)
+- [ ] StyleProfile 분리 (기존 템플릿으로 검증 후)
 - [ ] 플러그인 패키징
 
 ## v1.1
