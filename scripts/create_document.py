@@ -1,231 +1,159 @@
 #!/usr/bin/env python3
-"""Create an HWPX document from Markdown or JSON input.
+"""create_document.py — 원커맨드 HWPX 문서 생성 파이프라인.
 
-Supports:
-  - Paragraphs (plain text lines)
-  - Tables (Markdown pipe tables or JSON array-of-arrays)
-  - Headers/footers (via JSON metadata)
+JSON 입력 + 스타일/템플릿 지정 → section0.xml 생성 → HWPX 빌드 → 검증까지 한 번에.
 
 Usage:
-    python create_document.py --input content.md --output result.hwpx
-    python create_document.py --input content.json --output result.hwpx
-    echo "Hello World" | python create_document.py --output result.hwpx
+    # KCUP 스타일로 문서 생성
+    python3 create_document.py input.json --style kcup --output result.hwpx
+
+    # 템플릿 지정 (style 미지정 시 template만 사용)
+    python3 create_document.py input.json --template report --output result.hwpx
+
+    # 검증 스킵
+    python3 create_document.py input.json --style kcup --output result.hwpx --no-validate
+
+내부 동작:
+    1. JSON 로드
+    2. section_builder.py로 section0.xml 생성
+    3. build_hwpx.py로 HWPX 패키징
+    4. validate.py로 구조 검증
 """
 
 import argparse
 import json
-import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-from hwpx import HwpxDocument
+SCRIPT_DIR = Path(__file__).resolve().parent
+SKILL_DIR = SCRIPT_DIR.parent
+TEMPLATES_DIR = SKILL_DIR / "templates"
+
+STYLE_TEMPLATE_MAP = {
+    "kcup": "kcup",
+    "gonmun": "gonmun",
+    "report": "report",
+    "minutes": "minutes",
+    "proposal": "proposal",
+}
 
 
-def parse_markdown(text: str) -> list[dict]:
-    """Parse Markdown text into a list of content blocks.
-
-    Returns a list of dicts, each with:
-      - {"type": "paragraph", "text": "..."}
-      - {"type": "table", "rows": [["cell", ...], ...]}
-      - {"type": "heading", "level": 1-6, "text": "..."}
-    """
-    blocks: list[dict] = []
-    lines = text.split("\n")
-    table_buffer: list[str] = []
-    i = 0
-
-    while i < len(lines):
-        line = lines[i]
-
-        # Heading
-        heading_match = re.match(r"^(#{1,6})\s+(.+)$", line)
-        if heading_match:
-            if table_buffer:
-                blocks.append(_parse_md_table(table_buffer))
-                table_buffer = []
-            level = len(heading_match.group(1))
-            blocks.append({
-                "type": "heading",
-                "level": level,
-                "text": heading_match.group(2).strip(),
-            })
-            i += 1
-            continue
-
-        # Table row (pipe-delimited)
-        if "|" in line and line.strip().startswith("|"):
-            table_buffer.append(line)
-            i += 1
-            continue
-
-        # End of table
-        if table_buffer:
-            blocks.append(_parse_md_table(table_buffer))
-            table_buffer = []
-
-        # Non-empty line -> paragraph
-        stripped = line.strip()
-        if stripped:
-            blocks.append({"type": "paragraph", "text": stripped})
-
-        i += 1
-
-    if table_buffer:
-        blocks.append(_parse_md_table(table_buffer))
-
-    return blocks
+def resolve_template(style=None, template=None):
+    """style 또는 template에서 실제 템플릿 이름을 결정."""
+    if style:
+        tpl = STYLE_TEMPLATE_MAP.get(style)
+        if tpl is None:
+            avail = ", ".join(STYLE_TEMPLATE_MAP.keys())
+            print(f"ERROR: Unknown style '{style}'. Available: {avail}",
+                  file=sys.stderr)
+            sys.exit(1)
+        return tpl
+    return template
 
 
-def _parse_md_table(lines: list[str]) -> dict:
-    """Parse Markdown pipe table lines into a table block."""
-    rows = []
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        # Skip separator rows (e.g., |---|---|---|)
-        if re.match(r"^\|[\s\-:|]+$", line):
-            continue
-        cells = [c.strip() for c in line.split("|")]
-        # Remove empty first/last from leading/trailing pipes
-        if cells and cells[0] == "":
-            cells = cells[1:]
-        if cells and cells[-1] == "":
-            cells = cells[:-1]
-        if cells:
-            rows.append(cells)
-    return {"type": "table", "rows": rows}
+def run_step(cmd, step_name):
+    """서브프로세스 실행. 실패 시 에러 출력 후 종료."""
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"FAIL at [{step_name}]:", file=sys.stderr)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+        if result.stdout:
+            print(result.stdout, file=sys.stderr)
+        sys.exit(1)
+    return result
 
 
-def parse_json_input(text: str) -> list[dict]:
-    """Parse JSON input into content blocks.
-
-    Expected format:
-    {
-      "header": "optional header text",
-      "footer": "optional footer text",
-      "content": [
-        {"type": "paragraph", "text": "..."},
-        {"type": "heading", "level": 1, "text": "..."},
-        {"type": "table", "rows": [["a", "b"], ["c", "d"]]}
-      ]
-    }
-    """
-    data = json.loads(text)
-    blocks: list[dict] = []
-
-    if "header" in data:
-        blocks.append({"type": "header", "text": data["header"]})
-    if "footer" in data:
-        blocks.append({"type": "footer", "text": data["footer"]})
-
-    content = data.get("content", [])
-    if isinstance(content, list):
-        blocks.extend(content)
-
-    return blocks
-
-
-def create_document(blocks: list[dict], output_path: str) -> None:
-    """Create an HWPX document from parsed content blocks."""
-
-    doc = HwpxDocument.new()
-    section = doc.sections[0]
-
-    for block in blocks:
-        btype = block.get("type", "paragraph")
-
-        if btype == "paragraph":
-            doc.add_paragraph(block.get("text", ""), section=section)
-
-        elif btype == "heading":
-            text = block.get("text", "")
-            doc.add_paragraph(text, section=section)
-
-        elif btype == "table":
-            rows = block.get("rows", [])
-            if not rows:
-                continue
-            num_rows = len(rows)
-            num_cols = max(len(r) for r in rows) if rows else 1
-            table = doc.add_table(num_rows, num_cols, section=section)
-            for r_idx, row in enumerate(rows):
-                for c_idx, cell_text in enumerate(row):
-                    if c_idx < num_cols:
-                        table.set_cell_text(r_idx, c_idx, str(cell_text))
-
-        elif btype == "header":
-            try:
-                doc.set_header_text(block.get("text", ""), section=section)
-            except TypeError:
-                print(
-                    "Warning: set_header_text() failed (known python-hwpx bug). "
-                    "Use unpack/pack workflow for headers.",
-                    file=sys.stderr,
-                )
-
-        elif btype == "footer":
-            try:
-                doc.set_footer_text(block.get("text", ""), section=section)
-            except TypeError:
-                print(
-                    "Warning: set_footer_text() failed (known python-hwpx bug). "
-                    "Use unpack/pack workflow for footers.",
-                    file=sys.stderr,
-                )
-
-    doc.save_to_path(output_path)
-    print(f"Created: {output_path}")
-
-
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser(
-        description="Create HWPX document from Markdown or JSON input"
-    )
-    parser.add_argument(
-        "--input", "-i",
-        help="Input file path (.md or .json). Reads from stdin if omitted.",
-    )
-    parser.add_argument(
-        "--output", "-o",
-        required=True,
-        help="Output .hwpx file path",
-    )
-    parser.add_argument(
-        "--format", "-f",
-        choices=["md", "json", "auto"],
-        default="auto",
-        help="Input format (default: auto-detect from extension)",
-    )
+        description="JSON → HWPX 원커맨드 파이프라인")
+    parser.add_argument("json_file", help="JSON 정의 파일 경로")
+    parser.add_argument("--style", "-s",
+                        help="스타일 이름 (kcup, gonmun, report 등)")
+    parser.add_argument("--template", "-t",
+                        help="템플릿 이름 (style 미지정 시 직접 지정)")
+    parser.add_argument("--output", "-o", required=True,
+                        help="출력 .hwpx 파일 경로")
+    parser.add_argument("--base-section",
+                        help="secPr 복사용 base section0.xml 경로")
+    parser.add_argument("--title", help="문서 제목 메타데이터")
+    parser.add_argument("--creator", help="작성자 메타데이터")
+    parser.add_argument("--no-validate", action="store_true",
+                        help="validate 단계 스킵")
     args = parser.parse_args()
 
-    # Read input
-    if args.input:
-        input_path = Path(args.input)
-        if not input_path.is_file():
-            print(f"Error: File not found: {args.input}", file=sys.stderr)
-            sys.exit(1)
-        text = input_path.read_text(encoding="utf-8")
-        fmt = args.format
-        if fmt == "auto":
-            fmt = "json" if input_path.suffix.lower() == ".json" else "md"
-    else:
-        text = sys.stdin.read()
-        fmt = args.format
-        if fmt == "auto":
-            # Try JSON first
-            fmt = "json" if text.strip().startswith("{") else "md"
+    json_path = Path(args.json_file).resolve()
+    if not json_path.exists():
+        print(f"ERROR: JSON not found: {json_path}", file=sys.stderr)
+        sys.exit(1)
 
-    # Parse
-    if fmt == "json":
-        blocks = parse_json_input(text)
-    else:
-        blocks = parse_markdown(text)
+    output_path = Path(args.output).resolve()
+    template_name = resolve_template(args.style, args.template)
 
-    if not blocks:
-        print("Warning: No content blocks parsed from input.", file=sys.stderr)
+    # base section 결정
+    base_section = None
+    if args.base_section:
+        base_section = Path(args.base_section).resolve()
+    elif template_name:
+        candidate = TEMPLATES_DIR / template_name / "section0.xml"
+        if candidate.exists():
+            base_section = candidate
 
-    create_document(blocks, args.output)
+    # ── Step 1: section_builder.py ──
+    with tempfile.NamedTemporaryFile(
+            suffix=".xml", prefix="section0_", delete=False) as tmp:
+        section_tmp = Path(tmp.name)
+
+    sb_cmd = [
+        sys.executable, str(SCRIPT_DIR / "section_builder.py"),
+        str(json_path),
+        "-o", str(section_tmp),
+    ]
+    if template_name:
+        sb_cmd += ["-t", template_name]
+    if base_section:
+        sb_cmd += ["--base-section", str(base_section)]
+
+    run_step(sb_cmd, "section_builder")
+
+    try:
+        # ── Step 2: build_hwpx.py ──
+        bh_cmd = [
+            sys.executable, str(SCRIPT_DIR / "build_hwpx.py"),
+            "--section", str(section_tmp),
+            "--output", str(output_path),
+        ]
+        if template_name:
+            bh_cmd += ["--template", template_name]
+        if args.title:
+            bh_cmd += ["--title", args.title]
+        if args.creator:
+            bh_cmd += ["--creator", args.creator]
+
+        run_step(bh_cmd, "build_hwpx")
+
+        # ── Step 3: validate.py ──
+        if not args.no_validate:
+            val_cmd = [
+                sys.executable, str(SCRIPT_DIR / "validate.py"),
+                str(output_path),
+            ]
+            result = run_step(val_cmd, "validate")
+
+        # 결과 출력
+        print(f"✅ {output_path}", file=sys.stderr)
+        info = []
+        if args.style:
+            info.append(f"style={args.style}")
+        if template_name:
+            info.append(f"template={template_name}")
+        if info:
+            print(f"   {' '.join(info)}", file=sys.stderr)
+
+    finally:
+        section_tmp.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

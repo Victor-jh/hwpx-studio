@@ -1,0 +1,67 @@
+{
+  "auto_spacing": true,
+  "content": [
+    {"type": "empty"},
+    {"type": "heading", "text": "이용자참여 신고제 운영 현황 보고서", "level": 1, "charPr": 15, "paraPr": 20},
+    {"type": "empty"},
+    {"type": "heading", "text": "2026. 03. 21.", "level": 2, "charPr": 16, "paraPr": 20},
+    {"type": "empty"},
+    {"type": "empty"},
+
+    {"type": "kcup_box", "title": "개요"},
+    {"type": "kcup_o", "keyword": "보고 목적", "text": "이용자참여 신고제 1분기 운영 현황 및 개선 방향 보고"},
+    {"type": "kcup_o", "keyword": "보고 기간", "text": "2026. 01. 01. ~ 2026. 03. 21."},
+    {"type": "kcup_o", "keyword": "담당 부서", "text": "이용자지원팀"},
+    {"type": "kcup_o", "keyword": "작 성 자", "text": "배종현"},
+
+    {"type": "kcup_box", "title": "주요 내용"},
+    {"type": "kcup_o", "keyword": "접수 현황", "text": "1분기 총 131건 접수, 전년 동기 대비 33.7% 증가"},
+    {"type": "kcup_o", "keyword": "처리율", "text": "93.1% 달성(전년 90.8% 대비 2.3%p 향상), 3월 처리율 88.2%로 개선 필요"},
+    {"type": "kcup_o", "keyword": "통신사별", "text": "SKT 48건·KT 45건·LGU+ 28건, 부당가입이 전체 유형 중 최다"},
+    {"type": "kcup_o", "keyword": "핵심 과제", "text": "3일 이내 1차 연락 의무화, 온라인 접수 채널 확대, 자동 집계 도입"},
+
+    {"type": "kcup_box", "title": "세부현황"},
+    {"type": "kcup_o_heading", "title": "신고 접수 현황"},
+    {"type": "kcup_dash", "keyword": "전체 접수", "text": "131건(1월 42, 2월 38, 3월 51) — 전년 동기 98건 대비 ▲33.7%"},
+    {"type": "kcup_dash", "keyword": "처리 완료", "text": "122건(처리율 93.1%), 미처리 9건은 3월 접수분 중심"},
+    {"type": "kcup_dash", "keyword": "월별 추이", "text": "1월 95.2% → 2월 97.4% → 3월 88.2%로 3월 처리율 하락"},
+    {"type": "kcup_note", "text": "3월 수치는 3/21 기준 잠정치이며, 월말 확정 후 변동 가능", "mode": "line"},
+
+    {"type": "kcup_o_heading", "title": "통신사별 신고 현황"},
+    {"type": "kcup_dash", "keyword": "SKT", "text": "48건 접수, 46건 처리(95.8%) — 부당가입 18건, 미환급 12건"},
+    {"type": "kcup_dash", "keyword": "KT", "text": "45건 접수, 41건 처리(91.1%) — 부당가입 15건, 요금 과다청구 14건"},
+    {"type": "kcup_dash", "keyword": "LGU+", "text": "28건 접수, 25건 처리(89.3%) — 부당가입 10건, 해지 방해 8건"},
+
+    {"type": "kcup_box", "title": "주요 조치 사항"},
+    {"type": "kcup_o_heading", "title": "보완요청 처리 현황"},
+    {"type": "kcup_dash", "keyword": "목적", "text": "유선통화를 통한 보완요청 사항 안내 및 후속 조치"},
+    {"type": "kcup_dash", "keyword": "현황", "text": "총 15건 보완요청 중 13건 완료, 2건 미통화(재시도 예정)"},
+
+    {"type": "kcup_o_heading", "title": "개통취소 및 단말기 반납 처리"},
+    {"type": "kcup_dash", "keyword": "대상", "text": "부당가입 확인된 3건(SKT 1건, KT 2건)"},
+    {"type": "kcup_dash", "keyword": "조치", "text": "개통취소 완료, 단말기 반납 진행 중 → 신고 반려 처리 예정"},
+
+    {"type": "kcup_o_heading", "title": "사전실태점검 등록점 검증"},
+    {"type": "kcup_dash", "keyword": "대상", "text": "사전승낙 위반·허위과장광고 실가입 의심 유통점 47개소"},
+    {"type": "kcup_dash", "keyword": "일정", "text": "2026. 03. 24. ~ 03. 28. 현장 점검 실시"},
+
+    {"type": "kcup_box", "title": "개선 과제"},
+    {"type": "kcup_o", "keyword": "처리 속도", "text": "3월 처리율 88.2%(목표 95%) — 접수 후 3일 이내 1차 연락 의무화, 미처리 건 주간 모니터링 강화(4월~)"},
+    {"type": "kcup_o", "keyword": "접수 채널", "text": "온라인 비율 12%에 불과 — 온라인 신고 양식 개선, 모바일 접수 경로 추가(5월~)"},
+    {"type": "kcup_o", "keyword": "데이터 분석", "text": "수동 집계(엑셀) 한계 — 자동 집계 시스템 구축, 월간 대시보드 도입(하반기)"},
+
+    {"type": "kcup_box", "title": "향후 계획"},
+    {"type": "kcup_numbered", "num": 1, "text": "3월 잔여 미처리 건(9건) 3/28까지 완료"},
+    {"type": "kcup_numbered", "num": 2, "text": "사전실태점검 현장 점검 결과 4/4까지 보고"},
+    {"type": "kcup_numbered", "num": 3, "text": "2분기 운영 개선안 4/11까지 수립"},
+    {"type": "kcup_numbered", "num": 4, "text": "신고제 관련 유관기관 회의 참석(4월 중)"},
+    {"type": "kcup_note", "text": "상기 일정은 내부 검토 결과에 따라 변경될 수 있음", "mode": "line"},
+
+    {"type": "empty"},
+    {"type": "text", "text": "— 끝 —", "paraPr": 20},
+    {"type": "empty"},
+    {"type": "empty"},
+
+    {"type": "signature", "date": "2026. 03. 21.", "org": "방송통신이용자보호협회", "author": "이용자지원팀 배종현"}
+  ]
+}
