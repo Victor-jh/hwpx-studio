@@ -91,9 +91,12 @@ source "$VENV"
 │   │   ├── unpack.py                     # HWPX → 디렉토리 (XML pretty-print)
 │   │   └── pack.py                       # 디렉토리 → HWPX
 │   ├── build_hwpx.py                     # 템플릿 + XML → .hwpx 조립 (핵심)
+│   ├── section_builder.py                # JSON → section0.xml 동적 생성 (27개 블록 타입)
+│   ├── create_document.py                # JSON→HWPX 원커맨드 파이프라인
 │   ├── analyze_template.py               # HWPX 심층 분석 (레퍼런스 기반 생성용)
 │   ├── validate.py                       # HWPX 구조 검증
 │   ├── page_guard.py                     # 레퍼런스 대비 페이지 드리프트 위험 검사
+│   ├── diff_docs.py                      # 텍스트 diff + 구조 비교
 │   └── text_extract.py                   # 텍스트 추출
 ├── templates/
 │   ├── base/                             # 베이스 템플릿 (Skeleton 기반)
@@ -102,7 +105,8 @@ source "$VENV"
 │   ├── gonmun/                           # 공문 오버레이 (header.xml, section0.xml)
 │   ├── report/                           # 보고서 오버레이
 │   ├── minutes/                          # 회의록 오버레이
-│   └── proposal/                         # 제안서/사업개요 오버레이 (색상 헤더바, 번호 배지)
+│   ├── proposal/                         # 제안서/사업개요 오버레이 (색상 헤더바, 번호 배지)
+│   └── kcup/                             # KCUP 팀장 대응용 보고서 (20mm 여백, 전용 스타일)
 └── references/
     └── hwpx-format.md                    # OWPML XML 요소 레퍼런스
 ```
@@ -168,6 +172,100 @@ python3 "$SKILL_DIR/scripts/build_hwpx.py" --section "$SECTION" --output result.
 # 3. 정리
 rm -f "$SECTION"
 ```
+
+---
+
+## 워크플로우 1.5: JSON→HWPX 원커맨드 파이프라인 (레퍼런스 없이 새 문서 생성)
+
+레퍼런스 파일 없이 새 문서를 빠르게 생성할 때 사용. JSON으로 블록을 정의하면 section_builder → build_hwpx → validate를 한 번에 실행한다.
+
+### 기본 사용법
+
+```bash
+source "$VENV"
+
+# 원커맨드: JSON → HWPX (기본 템플릿)
+python3 "$SKILL_DIR/scripts/create_document.py" input.json -o result.hwpx
+
+# 스타일 지정 (스타일→템플릿 자동 매핑)
+python3 "$SKILL_DIR/scripts/create_document.py" input.json --style kcup -o result.hwpx
+
+# 템플릿 직접 지정
+python3 "$SKILL_DIR/scripts/create_document.py" input.json --template gonmun -o result.hwpx
+```
+
+### 스타일↔템플릿 매핑
+
+| --style | --template | 용도 |
+|---------|------------|------|
+| kcup | kcup | KCUP 팀장 대응용 보고서 (20mm 여백, 48190 본문폭) |
+| (미지정) | report | 기본 보고서 |
+
+### JSON 입력 형식
+
+```json
+{
+  "auto_spacing": true,
+  "blocks": [
+    {"type": "kcup_box", "text": "□ 항목 제목"},
+    {"type": "kcup_o", "keyword": "키워드", "text": "본문 내용"},
+    {"type": "kcup_dash", "text": "세부 내용"},
+    {"type": "table", "rows": [["A", "B"], ["C", "D"]]}
+  ]
+}
+```
+
+### JSON 블록 타입 (전체 27개)
+
+#### 기본 타입 (11개) — 모든 템플릿에서 사용 가능
+
+| type | 필수 필드 | 설명 |
+|------|-----------|------|
+| text | text | 일반 문단 (charPr, paraPr 옵션) |
+| empty | — | 빈 줄 (charPr 옵션) |
+| heading | text, level(1-3) | 제목 문단 |
+| bullet | text | 불릿 항목 (•) |
+| numbered | text, number | 번호 항목 |
+| indent | text, level(1-3) | 들여쓰기 문단 |
+| note | text | ※ 주석 문단 |
+| table | rows | 표 (colRatios, headerRows, charPr, paraPr, colSpan/rowSpan 옵션) |
+| label_value | pairs | 라벨-값 2열 표 ([["라벨","값"], ...]) |
+| signature | lines | 서명 블록 (우측 정렬) |
+| pagebreak | — | 페이지 나누기 |
+
+#### KCUP 전용 타입 (16개) — template=kcup에서 사용
+
+| type | 필수 필드 | 설명 | 런 구조 |
+|------|-----------|------|---------|
+| kcup_box | text | □항목 제목 (14pt 볼드 휴먼명조) | 2-run: "□ " + 제목 |
+| kcup_o | keyword, text | o항목 키워드+본문 | 4-run: "o " + 키워드 + " " + 본문 |
+| kcup_o_plain | text | o항목 본문만 | 2-run: "o " + 본문 |
+| kcup_o_heading | text | o항목 소제목 (볼드) | 2-run: "o " + 소제목(볼드) |
+| kcup_dash | text | -항목 세부 | 2-run: "- " + 세부내용 |
+| kcup_dash_plain | text | -항목 (일반 글자) | 2-run: "- " + 내용(일반) |
+| kcup_numbered | number, text | 번호항목 (①②③) | 2-run: "번호 " + 내용 |
+| kcup_note | text | ※주석 (9pt) | 1-run |
+| kcup_attachment | text | 붙임 문단 | 2-run: "붙임 " + 내용 |
+| kcup_pointer | text | ▶가리킴 | 2-run: "▶ " + 내용 |
+| kcup_mixed_run | runs | 다중 run 직접 지정 | runs 배열대로 |
+| kcup_box_spacing | — | □항목 전 간격줄 (14pt 160%) | auto_spacing시 자동 |
+| kcup_o_spacing | — | o항목 전 간격줄 (10pt 100%) | auto_spacing시 자동 |
+| kcup_o_heading_spacing | — | 소제목 전 간격줄 (14pt 100%) | auto_spacing시 자동 |
+| kcup_dash_spacing | — | -항목 전 간격줄 (10pt 100%) | auto_spacing시 자동 |
+
+#### auto_spacing 규칙
+
+`"auto_spacing": true`를 JSON 최상위에 설정하면 블록 타입 전이 시 자동으로 간격줄 삽입:
+
+| 이전 블록 | 다음 블록 | 삽입되는 간격줄 |
+|-----------|-----------|----------------|
+| box | 아무 항목 | kcup_box_spacing (14pt, 160%) |
+| o/numbered | 다음 항목 | kcup_o_spacing (10pt, 100%) |
+| dash | 다음 항목 | kcup_o_spacing (10pt, 100%) |
+| o_heading | o_heading | kcup_o_heading_spacing (14pt, 100%) |
+| note/signature | — | passthrough (간격 삽입 안 함) |
+
+auto_spacing을 사용하면 수동 spacing 타입을 JSON에 넣지 않아도 됨 (53% JSON 감소 효과).
 
 ---
 
@@ -259,8 +357,9 @@ section0.xml의 첫 문단(`<hp:p>`)의 첫 런(`<hp:run>`)에 반드시 `<hp:se
 
 ### 표 크기 계산
 
-- **A4 본문폭**: 42520 HWPUNIT = 59528(용지) - 8504×2(좌우여백)
-- **열 너비 합 = 본문폭** (42520)
+- **A4 본문폭**: 42520 HWPUNIT = 59528(용지) - 8504×2(좌우여백, 30mm)
+- **KCUP 본문폭**: 48190 HWPUNIT = 59528(용지) - 5669×2(좌우여백, 20mm)
+- **열 너비 합 = 본문폭** (42520 또는 kcup은 48190)
 - 예: 3열 균등 → 14173 + 14173 + 14174 = 42520
 - 예: 2열 (라벨:내용 = 1:4) → 8504 + 34016 = 42520
 - **행 높이**: 셀당 보통 2400~3600 HWPUNIT
@@ -413,6 +512,51 @@ section0.xml의 첫 문단(`<hp:p>`)의 첫 런(`<hp:run>`)에 반드시 `<hp:se
 <!-- borderFillIDRef="8" + charPrIDRef="8"  → 하단선만 검정 볼드 제목 -->
 ```
 
+### kcup (KCUP 팀장 대응용 보고서) — 독립 헤더
+
+**페이지**: A4, 20mm 여백 (본문폭 48190 HWPUNIT, 기본 42520과 다름)
+**폰트**: 함초롬돋움(0), 함초롬바탕(1), HY헤드라인M(2), 휴먼명조(3), 고도M(4)
+
+| ID | 유형 | 설명 |
+|----|------|------|
+| charPr 15 | 글자 | 19pt 볼드 HY헤드라인M (표지 제목) |
+| charPr 16 | 글자 | 14pt 휴먼명조 (본문) |
+| charPr 17 | 글자 | 14pt 볼드 휴먼명조 (키워드) |
+| charPr 18 | 글자 | 14pt 볼드 휴먼명조 (□항목 제목) |
+| charPr 19 | 글자 | 14pt 휴먼명조 (간격줄, 160% 참조) |
+| charPr 20 | 글자 | 14pt 휴먼명조 (간격줄 alt) |
+| charPr 21 | 글자 | 10pt 휴먼명조 (간격줄, 100%) |
+| charPr 22 | 글자 | 14pt 휴먼명조 (대괄호/기호) |
+| charPr 25 | 글자 | 12pt 고도M (sp_n4_12) |
+| charPr 27 | 글자 | 고도M (sp_n3) |
+| charPr 28 | 글자 | 12pt 고도M (sp_n1_12) |
+| charPr 29 | 글자 | 고도M (sp_n1) |
+| charPr 34 | 글자 | 고도M (sp_n4) |
+| charPr 35 | 글자 | 고도M (sp_n5) |
+| charPr 37 | 글자 | 고도M (sp_p3) |
+| paraPr 26 | 문단 | JUSTIFY, intent=-2319 (o항목 hanging indent) |
+| paraPr 28 | 문단 | JUSTIFY, left=252 (□항목) |
+| paraPr 30 | 문단 | JUSTIFY, intent=-3103 (-항목 hanging indent) |
+| paraPr 31 | 문단 | JUSTIFY, 100% 줄간격 (간격줄) |
+| borderFill 3 | 테두리 | SOLID 테두리 |
+
+**KCUP_CP 상수맵** (section_builder.py):
+```python
+KCUP_CP = {
+    "cover_title": 15, "body": 16, "bold": 17, "box": 18,
+    "gap14": 19, "gap14_alt": 20, "gap10": 21, "bracket": 22,
+    "sp_n4_12": 25, "sp_n3": 27, "sp_n1_12": 28, "sp_n1": 29,
+    "sp_n4": 34, "sp_n5": 35, "sp_p3": 37,
+}
+KCUP_PP = {"o": 26, "box": 28, "dash": 30, "gap": 31}
+```
+
+**KCUP 런 분리 규칙**:
+- □항목: `[box체 "□ "] + [box체 제목]` (2-run, paraPr=box)
+- o키워드: `[body "o "] + [bold 키워드] + [body " "] + [body 본문]` (4-run, paraPr=o)
+- o소제목: `[body "o "] + [bold 소제목]` (2-run, paraPr=o)
+- -항목: `[body "- "] + [body 내용]` (2-run, paraPr=dash)
+
 ---
 
 ## 워크플로우 2: 기존 문서 편집 (unpack → Edit → pack)
@@ -547,12 +691,15 @@ python3 "$SKILL_DIR/scripts/page_guard.py" \
 
 | 스크립트 | 용도 |
 |----------|------|
-| `scripts/build_hwpx.py` | **핵심** — 템플릿 + XML → HWPX 조립 |
+| `scripts/create_document.py` | **원커맨드** — JSON → section_builder → build_hwpx → validate 파이프라인 |
+| `scripts/section_builder.py` | JSON → section0.xml 동적 생성 (27개 블록 타입, auto_spacing) |
+| `scripts/build_hwpx.py` | 템플릿 + XML → HWPX 조립 |
 | `scripts/analyze_template.py` | HWPX 심층 분석 (레퍼런스 기반 생성의 청사진) |
 | `scripts/office/unpack.py` | HWPX → 디렉토리 (XML pretty-print) |
 | `scripts/office/pack.py` | 디렉토리 → HWPX (mimetype first) |
 | `scripts/validate.py` | HWPX 파일 구조 검증 |
 | `scripts/page_guard.py` | 레퍼런스 대비 페이지 드리프트 위험 검사 (필수 게이트) |
+| `scripts/diff_docs.py` | 텍스트 unified diff + 구조 비교 |
 | `scripts/text_extract.py` | HWPX 텍스트 추출 |
 
 ## 단위 변환
@@ -565,8 +712,10 @@ python3 "$SKILL_DIR/scripts/page_guard.py" \
 | 1cm | 2835 | 센티미터 |
 | A4 폭 | 59528 | 210mm |
 | A4 높이 | 84186 | 297mm |
-| 좌우여백 | 8504 | 30mm |
-| 본문폭 | 42520 | 150mm (A4-좌우여백) |
+| 좌우여백(기본) | 8504 | 30mm |
+| 좌우여백(kcup) | 5669 | 20mm |
+| 본문폭(기본) | 42520 | 150mm (A4-좌우여백 30mm) |
+| 본문폭(kcup) | 48190 | 170mm (A4-좌우여백 20mm) |
 
 ## Critical Rules
 
