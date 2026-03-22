@@ -1,12 +1,17 @@
 ---
 name: hwpx
-description: "한글(HWPX) 문서 생성/읽기/편집 스킬. .hwpx 파일, 한글 문서, Hancom, OWPML 관련 요청 시 사용."
+description: "한글(HWPX) 문서 생성/읽기/편집/분석 스킬. .hwpx 파일, 한글 문서, Hancom, OWPML, 한컴, 한글 문서 읽기, 문서 수정, 텍스트 교체, 블록 삽입/삭제, 머리말 꼬리말 변경 관련 요청 시 사용."
 ---
 
-# HWPX 문서 스킬 — 레퍼런스 복원 우선(XML-first) 워크플로우
+# HWPX 문서 스킬 — 생성 · 읽기 · 편집 (XML-first)
 
-한글(Hancom Office)의 HWPX 파일을 **XML 직접 작성** 중심으로 생성, 편집, 읽기할 수 있는 스킬.
+한글(Hancom Office)의 HWPX 파일을 **XML 직접 작성** 중심으로 생성, 읽기, 편집할 수 있는 스킬.
 HWPX는 ZIP 기반 XML 컨테이너(OWPML 표준)이다. python-hwpx API의 서식 버그를 완전히 우회하며, 세밀한 서식 제어가 가능하다.
+
+### 핵심 기능 3가지
+1. **생성** — JSON 블록 정의 → HWPX 문서 자동 생성 (35개 블록 타입, 6개 템플릿)
+2. **읽기** — HWPX → JSON 역변환 (블록 타입 자동 감지, 머리말/꼬리말, 스타일 추출)
+3. **편집** — 기존 HWPX의 텍스트 교체, 블록 삽입/삭제/수정, 머리말·꼬리말 변경 (서식 보존)
 
 ## 기본 동작 모드 (필수): 첨부 HWPX 분석 → 고유 XML 복원(99% 근접) → 요청 반영 재작성
 
@@ -91,8 +96,10 @@ source "$VENV"
 │   │   ├── unpack.py                     # HWPX → 디렉토리 (XML pretty-print)
 │   │   └── pack.py                       # 디렉토리 → HWPX
 │   ├── build_hwpx.py                     # 템플릿 + XML → .hwpx 조립 (핵심, 이미지/다중섹션 지원)
-│   ├── section_builder.py                # JSON → section0.xml 동적 생성 (32개 블록 타입)
+│   ├── section_builder.py                # JSON → section0.xml 동적 생성 (35개 블록 타입)
 │   ├── create_document.py                # JSON→HWPX 원커맨드 파이프라인 (단일/다중 섹션)
+│   ├── read_document.py                  # ★ HWPX→JSON 역변환 (블록 타입 자동 감지, 스타일 추출)
+│   ├── edit_document.py                  # ★ HWPX in-place 편집 (텍스트 교체, 블록 삽입/삭제, H/F 수정)
 │   ├── property_registry.py              # 동적 charPr/paraPr/borderFill 레지스트리
 │   ├── analyze_template.py               # HWPX 심층 분석 (레퍼런스 기반 생성용)
 │   ├── validate.py                       # HWPX 구조 검증
@@ -768,7 +775,157 @@ python3 "$SKILL_DIR/scripts/validate.py" edited.hwpx
 
 ---
 
-## 워크플로우 3: 읽기/텍스트 추출
+## 워크플로우 3: HWPX → JSON 구조 읽기 (read_document.py)
+
+HWPX 문서를 파싱하여 `section_builder.py` 호환 JSON으로 역변환한다.
+라운드트립(HWPX → JSON → HWPX → JSON) 100% 일치가 핵심 목표.
+
+### CLI 사용법
+
+```bash
+source "$VENV"
+
+# 기본 출력 (stdout, 압축 JSON)
+python3 "$SKILL_DIR/scripts/read_document.py" document.hwpx
+
+# Pretty-print + 파일 저장
+python3 "$SKILL_DIR/scripts/read_document.py" document.hwpx --pretty -o output.json
+
+# 스타일 스펙 포함 (charPr/paraPr 상세 정보를 _styles 키에 추가)
+python3 "$SKILL_DIR/scripts/read_document.py" document.hwpx --pretty --include-styles -o output.json
+```
+
+### 출력 JSON 구조
+
+```json
+{
+  "template": "kcup",
+  "header": {"text": "- {{page}} -", "align": "center"},
+  "footer": {"text": "{{page}} / {{total_pages}}", "align": "right"},
+  "blocks": [
+    {"type": "heading", "text": "제목", "level": 1},
+    {"type": "text", "text": "본문 텍스트"},
+    {"type": "kcup_box", "text": "□ 항목 제목"},
+    {"type": "kcup_o", "keyword": "핵심", "text": "설명 내용"},
+    {"type": "table", "rows": [["A", "B"], ["C", "D"]]},
+    {"type": "spacing", "height": 10}
+  ]
+}
+```
+
+### 감지 블록 타입 (35종)
+
+**기본 19종**: heading(1~6), text, spacing, table, image, textbox, bullet, numbered(circle/parenthesis), page_break, section_break, text_footnote, text_endnote, hyperlink, bookmark, field, caption
+
+**KCUP 16종**: kcup_box, kcup_o, kcup_o_heading, kcup_dash, kcup_gap14, kcup_gap14_alt, kcup_gap10, kcup_note, kcup_signature, kcup_cover_title, kcup_spacing_*, kcup_table
+
+### Python API
+
+```python
+from read_document import HWPXReader
+
+reader = HWPXReader("document.hwpx")
+reader.load()
+result = reader.to_json(include_styles=True)  # dict 반환
+# result["blocks"], result["header"], result["footer"], result.get("_styles")
+```
+
+### 활용 시나리오
+
+- **라운드트립 편집**: HWPX → JSON으로 읽고 → 블록 수정 → `create_document.py`로 재생성
+- **문서 분석**: 블록 타입 통계, 구조 파악, 스타일 사용 패턴 조회
+- **마이그레이션**: HWPX 콘텐츠를 JSON으로 추출하여 다른 포맷으로 변환
+
+---
+
+## 워크플로우 4: HWPX 인플레이스 편집 (edit_document.py)
+
+기존 HWPX의 ZIP 내부 section0.xml을 직접 수정하여 저장한다.
+스타일·서식·이미지·표 구조 등 원본의 모든 요소가 보존되며, 변경 대상만 정밀하게 수정된다.
+
+### CLI 사용법
+
+```bash
+source "$VENV"
+
+# 텍스트 찾아 바꾸기
+python3 "$SKILL_DIR/scripts/edit_document.py" doc.hwpx \
+  --replace "원본텍스트" "새텍스트" -o edited.hwpx
+
+# 정규식 찾아 바꾸기
+python3 "$SKILL_DIR/scripts/edit_document.py" doc.hwpx \
+  --replace "2024년 \d+월" "2025년 3월" --regex -o edited.hwpx
+
+# 블록 삭제 (인덱스 5번)
+python3 "$SKILL_DIR/scripts/edit_document.py" doc.hwpx \
+  --delete-block 5 -o edited.hwpx
+
+# 텍스트 블록 삽입 (인덱스 3 위치에)
+python3 "$SKILL_DIR/scripts/edit_document.py" doc.hwpx \
+  --insert-text 3 "새로 삽입할 문단" -o edited.hwpx
+
+# JSON 편집 스크립트로 복합 작업
+python3 "$SKILL_DIR/scripts/edit_document.py" doc.hwpx \
+  --edit-json edit_commands.json -o edited.hwpx
+```
+
+### JSON 편집 스크립트 형식
+
+```json
+{
+  "operations": [
+    {"op": "replace_text", "find": "원본", "replace": "새것"},
+    {"op": "replace_text", "find": "2024년 \\d+월", "replace": "2025년 3월", "regex": true},
+    {"op": "insert_block", "index": 3, "block": {"type": "text", "text": "새 문단"}},
+    {"op": "delete_block", "index": 5},
+    {"op": "update_block_text", "index": 2, "text": "수정된 텍스트"},
+    {"op": "update_block", "index": 4, "block": {"type": "heading", "text": "새 제목", "level": 2}},
+    {"op": "reorder_blocks", "order": [0, 2, 1, 3, 4]},
+    {"op": "update_header_footer", "target": "header", "text": "새 머리말", "align": "center"},
+    {"op": "update_header_footer", "target": "footer", "text": "{{page}} / {{total_pages}}"}
+  ]
+}
+```
+
+### 지원 편집 작업 (6종)
+
+| 작업 | 설명 |
+|------|------|
+| `replace_text` | 텍스트 찾아 바꾸기 (정규식 지원) |
+| `insert_block` | 지정 인덱스에 새 블록 삽입 (section_builder 활용) |
+| `delete_block` | 인덱스로 블록(문단/표) 삭제 |
+| `update_block_text` | 인덱스로 블록의 텍스트만 수정 (서식 보존) |
+| `update_block` | 인덱스로 블록 전체 교체 (새 블록으로 대체) |
+| `reorder_blocks` | 블록 순서 재배치 |
+| `update_header_footer` | 머리말/꼬리말 텍스트·정렬 수정 |
+
+### Python API
+
+```python
+from edit_document import HWPXEditor
+
+editor = HWPXEditor("doc.hwpx")
+editor.load()
+
+editor.replace_text("원본", "새것", regex=False)
+editor.insert_block(3, {"type": "text", "text": "삽입 문단"})
+editor.delete_block(5)
+editor.update_block_text(2, "수정 텍스트")
+editor.update_header_footer("footer", "{{page}} / {{total_pages}}", align="right")
+
+editor.save("edited.hwpx")  # mimetype ZIP_STORED 자동 보장
+```
+
+### 핵심 원칙
+
+- **서식 100% 보존**: ZIP 내부의 header.xml, BinData, META-INF 등 편집 대상 외 파일은 원본 그대로 유지
+- **mimetype ZIP_STORED**: 재패키징 시 mimetype은 반드시 ZIP_STORED(compress_type=0)
+- **인덱스 기준**: 블록 인덱스는 `read_document.py` 출력의 blocks 배열 순서와 일치
+- **insert_block은 section_builder 활용**: 삽입할 블록의 JSON은 `section_builder.py`의 블록 타입 스펙을 따름
+
+---
+
+## 워크플로우 5: 읽기/텍스트 추출
 
 ```bash
 source "$VENV"
@@ -794,7 +951,7 @@ with TextExtractor("document.hwpx") as ext:
 
 ---
 
-## 워크플로우 4: 검증
+## 워크플로우 6: 검증
 
 ```bash
 source "$VENV"
@@ -805,7 +962,7 @@ python3 "$SKILL_DIR/scripts/validate.py" document.hwpx
 
 ---
 
-## 워크플로우 5: 레퍼런스 기반 문서 생성 (첨부 HWPX가 있을 때 기본 적용)
+## 워크플로우 7: 레퍼런스 기반 문서 생성 (첨부 HWPX가 있을 때 기본 적용)
 
 사용자가 제공한 HWPX 파일을 분석하여 동일한 레이아웃의 문서를 생성하는 워크플로우.
 이 스킬에서는 첨부 레퍼런스가 존재하면 본 워크플로우를 기본으로 사용한다.
@@ -880,7 +1037,9 @@ python3 "$SKILL_DIR/scripts/page_guard.py" \
 | 스크립트 | 용도 |
 |----------|------|
 | `scripts/create_document.py` | **원커맨드** — JSON → section_builder → build_hwpx → validate 파이프라인 |
-| `scripts/section_builder.py` | JSON → section0.xml 동적 생성 (27개 블록 타입, auto_spacing) |
+| `scripts/read_document.py` | **HWPX → JSON 역변환** — 35개 블록 타입 자동 감지, 라운드트립 지원 |
+| `scripts/edit_document.py` | **HWPX 인플레이스 편집** — 텍스트 교체/블록 삽입·삭제·수정/머리말·꼬리말 변경 |
+| `scripts/section_builder.py` | JSON → section0.xml 동적 생성 (35개 블록 타입, auto_spacing) |
 | `scripts/build_hwpx.py` | 템플릿 + XML → HWPX 조립 |
 | `scripts/analyze_template.py` | HWPX 심층 분석 (레퍼런스 기반 생성의 청사진) |
 | `scripts/office/unpack.py` | HWPX → 디렉토리 (XML pretty-print) |

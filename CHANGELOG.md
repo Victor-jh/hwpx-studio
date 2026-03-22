@@ -1,13 +1,46 @@
 # HWPX Skill CHANGELOG
 
 ## 현재 상태
-- 버전: v1.6.1 (Phase 1 종합 검증 완료 + 버그픽스)
-- Git: https://github.com/Victor-jh/hwpxskill (forked from Canine89/hwpxskill)
+- 버전: v2.0.0 (Phase 2 — 읽기/편집 기능 구현)
+- Git: https://github.com/Victor-jh/hwpx-studio (Private)
 - Cowork 경로: ~/HWPX Skill Dev
-- 스크립트: build_hwpx.py, analyze_template.py, section_builder.py, create_document.py, property_registry.py, diff_docs.py, validate.py, page_guard.py, text_extract.py, office/unpack.py, office/pack.py
+- 스크립트: build_hwpx.py, analyze_template.py, section_builder.py, create_document.py, property_registry.py, diff_docs.py, validate.py, page_guard.py, text_extract.py, **read_document.py**, **edit_document.py**, office/unpack.py, office/pack.py
 - 템플릿: base, gonmun, report, minutes, proposal, **kcup**
 - JSON 타입: 19 기본 + 16 KCUP 전용 = 35개
 - 동적 서식: charPr/paraPr/borderFill을 JSON dict로 인라인 지정 가능
+- **Phase 2**: HWPX → JSON 역변환 (read_document.py) + HWPX in-place 편집 (edit_document.py)
+
+## 2026-03-22 (Cowork 세션 #8) — Phase 2: HWPX 읽기/편집
+
+### read_document.py — HWPX → JSON 역변환기
+- **HWPXReader 클래스**: ZIP 내부 header.xml + section0.xml 파싱
+- **StyleRegistry**: header.xml에서 charPr/paraPr/borderFill/font 스타일 레지스트리 구축
+- **19개 기본 블록 타입 역감지**: heading(1/2/3), text, bullet, numbered, indent, note, table, label_value, empty, pagebreak, hyperlink, text_footnote, text_endnote, textbox, caption, bookmark, field(date/page_number/total_pages), image
+- **KCUP 전용 블록 역감지**: kcup_box, kcup_o, kcup_o_plain, kcup_o_heading, kcup_dash, kcup_dash_plain, kcup_numbered, kcup_note, kcup_attachment, kcup_pointer + spacing 타입들
+- **다중 run 보존**: 서로 다른 charPr을 가진 run들은 `runs` 배열로 출력
+- **테이블 셀 콘텐츠**: 단일 텍스트, 다중 run, 다중 문단(lines) 모두 추출
+- **머리말/꼬리말**: {{page}}/{{total_pages}} 플레이스홀더 자동 감지
+- **CLI**: `--pretty`, `--include-styles`, `--output` 지원
+- **라운드트립 검증**: ai_report_v2.hwpx (264블록/16타입) → JSON → HWPX → JSON: 100% 일치
+
+### edit_document.py — HWPX in-place 편집기
+- **HWPXEditor 클래스**: ZIP 내부 section XML 직접 수정 + 재패키징
+- **지원 작업 6가지**:
+  1. `replace_text` — 텍스트 찾아 바꾸기 (정규식 지원)
+  2. `insert_block` — 지정 위치에 블록 삽입 (section_builder 연동)
+  3. `delete_block` — 인덱스로 블록 삭제
+  4. `update_block` — 블록 텍스트 수정 또는 전체 교체
+  5. `reorder_blocks` — 블록 순서 변경
+  6. `update_header_footer` — 머리말/꼬리말 수정
+- **JSON 편집 스크립트**: `--edit-json` 으로 다중 작업 일괄 실행
+- **CLI 단축**: `--replace`, `--delete-block`, `--insert-text`
+- **mimetype ZIP_STORED**: HWPX 스펙 준수 (validate 통과)
+- **검증**: ai_report_v2.hwpx 대상 4개 편집 작업 모두 성공 + validate VALID
+
+### GitHub 마이그레이션
+- 기존 공개 포크 Victor-jh/hwpxskill → **새 프라이빗 레포 Victor-jh/hwpx-studio**
+- `git remote set-url origin https://github.com/Victor-jh/hwpx-studio.git`
+- 기존 포크 수동 삭제 필요 (GitHub Settings > Danger Zone)
 
 ## 2026-03-22 (Cowork 세션 #7) — Phase 1 종합 검증 + 버그픽스
 
