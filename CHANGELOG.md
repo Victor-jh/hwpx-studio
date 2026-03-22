@@ -1,13 +1,50 @@
 # HWPX Skill CHANGELOG
 
 ## 현재 상태
-- 버전: v1.4 (P1: 머리말/꼬리말 + 하이퍼링크 + 각주/미주)
+- 버전: v1.5 (P2: 글상자 + 다단 + 문단배경)
 - Git: https://github.com/Victor-jh/hwpxskill (forked from Canine89/hwpxskill)
 - Cowork 경로: ~/HWPX Skill Dev
 - 스크립트: build_hwpx.py, analyze_template.py, section_builder.py, create_document.py, property_registry.py, diff_docs.py, validate.py, page_guard.py, text_extract.py, office/unpack.py, office/pack.py
 - 템플릿: base, gonmun, report, minutes, proposal, **kcup**
-- JSON 타입: 15 기본 + 16 KCUP 전용 = 31개
+- JSON 타입: 16 기본 + 16 KCUP 전용 = 32개
 - 동적 서식: charPr/paraPr/borderFill을 JSON dict로 인라인 지정 가능
+
+## 2026-03-22 (Cowork 세션 #5) — P2: 글상자 + 다단 + 문단배경
+
+### 글상자 (TextBox) — `textbox` 블록 타입 (기본 타입 15→16개)
+- `hp:rect` 기반 인라인 글상자 (treatAsChar=1)
+- `text`: 단일 텍스트 / `lines`: 다중 줄 텍스트
+- `width`, `height`: mm 단위 크기 지정
+- `border_color`: 테두리 색상 (기본 #000000)
+- `bg_color`: 배경색 (기본 투명)
+- `text_align`: 텍스트 수직 정렬 (top/center/bottom, 기본 center)
+- `charPr`, `paraPr`: 동적 서식 지원
+- XML 구조: `hp:rect > hp:lineShape + hc:fillBrush + hp:drawText > hp:subList > hp:p`
+- renderingInfo (3 matrices), shadow, textMargin, pt0-pt3 corners 완전 구현
+
+### 다단 레이아웃 (Multi-column)
+- JSON 최상위 `"columns"` 키로 다단 설정
+- 정수형: `"columns": 2` → 2단 (기본 간격 1134 HWPUNIT)
+- 딕셔너리형: `"columns": {"count": 3, "gap": 1500, "layout": "LEFT", "sameSz": "0"}`
+- secPr 내 `hp:colPr` 속성 동적 오버라이드
+- 템플릿 경로/폴백 경로 모두 지원
+
+### 문단 배경색 (Paragraph Background)
+- `paraPr.borderFill` dict → PropertyRegistry `resolve_borderFill()` 연동
+- JSON 예: `"paraPr": {"borderFill": {"bg": "#FFF3CD"}}`
+- property_registry.py `resolve_paraPr()`에 borderFill dict→ID 브릿지 추가
+- 기존 `borderFillIDRef` (정수 ID 직접 지정)도 호환 유지
+
+### 검증 통과
+- 글상자 3종 (기본/배경색/다중줄) 빌드 + validate ✅
+- 다단 2단 레이아웃 적용 + validate ✅
+- 문단 배경색 2종 (노랑/파랑) + validate ✅
+- P2 통합 테스트 (textbox+columns+paragraph bg+기존 블록 회귀) ✅
+- **한컴독스 Web 에디터 렌더링 정상 확인** ✅
+
+### 산출물
+- p2_test.hwpx — P2 통합 테스트 문서
+- 한컴독스 렌더링 검증 완료 ✅ (글상자, 다단, 문단배경 모두 정상)
 
 ## 2026-03-22 (Cowork 세션 #4) — P1: 머리말/꼬리말 + 하이퍼링크 + 각주/미주
 

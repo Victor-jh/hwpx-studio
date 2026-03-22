@@ -3,10 +3,12 @@
 
 COWORK_CONTEXT.md 섹션 6 스펙 기반 재작성 + KCUP 팀장 대응용 스펙 v1.1.
 
-지원 타입 (공통 12):
+지원 타입 (공통 16):
   text, empty, heading, bullet, numbered, indent, note,
   table (colRatios, 셀 병합, 다중 run, 셀 내 다중 문단),
   image (인라인 이미지 삽입, BinData 연동),
+  hyperlink, text_footnote, text_endnote, footnote,
+  textbox (글상자, hp:rect 기반 인라인 배치),
   signature, label_value, pagebreak
 
 KCUP 전용 타입 (16):
@@ -781,8 +783,13 @@ def make_signature(idgen, item):
 
 # ── secPr 첫 문단 생성 ──────────────────────────────────────────
 
-def make_secpr_paragraph(idgen, base_section_path=None):
-    """section0.xml의 필수 첫 문단 (secPr + colPr)."""
+def make_secpr_paragraph(idgen, base_section_path=None, columns=None):
+    """section0.xml의 필수 첫 문단 (secPr + colPr).
+
+    columns: dict 또는 int. 다단 설정.
+      - int: 단 수 (예: 2)
+      - dict: {"count": 2, "gap": 1134, "layout": "LEFT", "same_width": True}
+    """
     if base_section_path:
         tree = etree.parse(str(base_section_path))
         root = tree.getroot()
@@ -793,6 +800,18 @@ def make_secpr_paragraph(idgen, base_section_path=None):
             # linesegarray 제거
             for ls in first_p.findall(f".//{{{HP}}}linesegarray"):
                 first_p.remove(ls)
+            # 다단 오버라이드 (columns 지정 시)
+            if columns is not None:
+                colpr = first_p.find(f".//{{{HP}}}colPr")
+                if colpr is not None:
+                    if isinstance(columns, int):
+                        colpr.set("colCount", str(columns))
+                        colpr.set("sameGap", "1134")
+                    elif isinstance(columns, dict):
+                        colpr.set("colCount", str(columns.get("count", 1)))
+                        colpr.set("sameGap", str(columns.get("gap", 1134)))
+                        colpr.set("layout", columns.get("layout", "LEFT"))
+                        colpr.set("sameSz", "1" if columns.get("same_width", True) else "0")
             return first_p
 
     # 폴백: 최소 secPr 문단
@@ -867,10 +886,220 @@ def make_secpr_paragraph(idgen, base_section_path=None):
     colpr = etree.SubElement(ctrl, hp("colPr"))
     colpr.set("id", "")
     colpr.set("type", "NEWSPAPER")
-    colpr.set("layout", "LEFT")
-    colpr.set("colCount", "1")
-    colpr.set("sameSz", "1")
-    colpr.set("sameGap", "0")
+
+    # 다단 설정 반영
+    col_count = 1
+    col_gap = 0
+    col_layout = "LEFT"
+    col_same_sz = "1"
+    if columns is not None:
+        if isinstance(columns, int):
+            col_count = columns
+            col_gap = 1134  # 기본 4mm 간격
+        elif isinstance(columns, dict):
+            col_count = columns.get("count", 1)
+            col_gap = columns.get("gap", 1134)
+            col_layout = columns.get("layout", "LEFT")
+            col_same_sz = "1" if columns.get("same_width", True) else "0"
+
+    colpr.set("layout", col_layout)
+    colpr.set("colCount", str(col_count))
+    colpr.set("sameSz", col_same_sz)
+    colpr.set("sameGap", str(col_gap))
+
+    return p
+
+
+# ── 글상자 (TextBox / rect) ────────────────────────────────────────
+
+_TEXTBOX_INSTID = 1042200000
+
+
+def _next_textbox_instid():
+    global _TEXTBOX_INSTID
+    _TEXTBOX_INSTID += 1
+    return str(_TEXTBOX_INSTID)
+
+
+def _mm_to_hwp(mm):
+    """mm → HWPUNIT (1mm ≈ 283.46 HWPUNIT)."""
+    return int(round(mm * 283.46))
+
+
+def make_textbox_paragraph(idgen, item, body_width=None, registry=None):
+    """글상자(TextBox) 블록.
+
+    JSON:
+      {"type": "textbox", "text": "내용",
+       "width": 100, "height": 30,         # mm (생략 시 본문폭×30mm)
+       "border_color": "#000000",           # 테두리 색 (생략 시 검정)
+       "border_width": "0.12 mm",           # 테두리 두께
+       "bg_color": "#FFFFFF",               # 배경색 (생략 시 흰색)
+       "text_align": "center",              # 글상자 내 수직정렬: top/center/bottom
+       "charPr": ..., "paraPr": ...         # 내부 텍스트 서식 (옵션)
+      }
+
+    treatAsChar=1 (인라인 배치) 방식.
+    """
+    bw = body_width or BODY_WIDTH
+
+    # 크기 결정 (mm → HWPUNIT)
+    w_mm = item.get("width", round(bw / 283.46))  # 기본: 본문폭
+    h_mm = item.get("height", 30)                  # 기본: 30mm
+    w = _mm_to_hwp(w_mm)
+    h = _mm_to_hwp(h_mm)
+
+    border_color = item.get("border_color", "#000000")
+    border_width = item.get("border_width", "0.12 mm")
+    bg_color = item.get("bg_color", "#FFFFFF")
+    vert_align = item.get("text_align", "CENTER").upper()
+    if vert_align not in ("TOP", "CENTER", "BOTTOM"):
+        vert_align = "CENTER"
+
+    p = make_paragraph(idgen)
+    run = p.find(f".//{{{HP}}}run")
+
+    # hp:rect
+    rect = etree.SubElement(run, hp("rect"))
+    rect.set("id", idgen.next())
+    rect.set("zOrder", "0")
+    rect.set("numberingType", "PICTURE")
+    rect.set("textWrap", "TOP_AND_BOTTOM")
+    rect.set("textFlow", "BOTH_SIDES")
+    rect.set("lock", "0")
+    rect.set("dropcapstyle", "None")
+    rect.set("href", "")
+    rect.set("groupLevel", "0")
+    rect.set("instid", _next_textbox_instid())
+    rect.set("ratio", "0")
+
+    etree.SubElement(rect, hp("offset"), x="0", y="0")
+    etree.SubElement(rect, hp("orgSz"), width=str(w), height=str(h))
+    etree.SubElement(rect, hp("curSz"), width="0", height="0")
+    etree.SubElement(rect, hp("flip"), horizontal="0", vertical="0")
+
+    rot = etree.SubElement(rect, hp("rotationInfo"))
+    rot.set("angle", "0")
+    rot.set("centerX", "0")
+    rot.set("centerY", "0")
+    rot.set("rotateimage", "1")
+
+    ri = etree.SubElement(rect, hp("renderingInfo"))
+    for mat_tag in ("transMatrix", "scaMatrix", "rotMatrix"):
+        mat = etree.SubElement(ri, hc(mat_tag))
+        mat.set("e1", "1"); mat.set("e2", "0"); mat.set("e3", "0")
+        mat.set("e4", "0"); mat.set("e5", "1"); mat.set("e6", "0")
+
+    # lineShape (테두리)
+    ls = etree.SubElement(rect, hp("lineShape"))
+    ls.set("color", border_color)
+    ls.set("width", border_width)
+    ls.set("style", "SOLID")
+    ls.set("endCap", "FLAT")
+    ls.set("headStyle", "NORMAL")
+    ls.set("tailStyle", "NORMAL")
+    ls.set("headfill", "1")
+    ls.set("tailfill", "1")
+    ls.set("headSz", "SMALL_SMALL")
+    ls.set("tailSz", "SMALL_SMALL")
+    ls.set("outlineStyle", "NORMAL")
+    ls.set("alpha", "0")
+
+    # fillBrush (배경)
+    fb = etree.SubElement(rect, hc("fillBrush"))
+    wb = etree.SubElement(fb, hc("winBrush"))
+    wb.set("faceColor", bg_color)
+    wb.set("hatchColor", "#000000")
+    wb.set("alpha", "0")
+
+    # shadow
+    shd = etree.SubElement(rect, hp("shadow"))
+    shd.set("type", "NONE")
+    shd.set("color", "#B2B2B2")
+    shd.set("offsetX", "0")
+    shd.set("offsetY", "0")
+    shd.set("alpha", "0")
+
+    # drawText (텍스트 내용)
+    dt = etree.SubElement(rect, hp("drawText"))
+    dt.set("lastWidth", "4294967295")
+    dt.set("name", "")
+    dt.set("editable", "0")
+
+    sl = etree.SubElement(dt, hp("subList"))
+    sl.set("id", "")
+    sl.set("textDirection", "HORIZONTAL")
+    sl.set("lineWrap", "BREAK")
+    sl.set("vertAlign", vert_align)
+    sl.set("linkListIDRef", "0")
+    sl.set("linkListNextIDRef", "0")
+    sl.set("textWidth", "0")
+    sl.set("textHeight", "0")
+    sl.set("hasTextRef", "0")
+    sl.set("hasNumRef", "0")
+
+    # 내부 텍스트 (여러 줄 지원: lines 또는 단일 text)
+    lines = item.get("lines", [item.get("text", "")])
+    if isinstance(lines, str):
+        lines = [lines]
+
+    inner_cp = _resolve_cp(item, 0, registry) if registry else 0
+    inner_pp = _resolve_pp(item, 0, registry) if registry else 0
+
+    for line in lines:
+        tp = etree.SubElement(sl, hp("p"))
+        tp.set("id", "0")
+        tp.set("paraPrIDRef", str(inner_pp))
+        tp.set("styleIDRef", "0")
+        tp.set("pageBreak", "0")
+        tp.set("columnBreak", "0")
+        tp.set("merged", "0")
+        tr = etree.SubElement(tp, hp("run"))
+        tr.set("charPrIDRef", str(inner_cp))
+        t_elem = etree.SubElement(tr, hp("t"))
+        t_elem.text = str(line)
+
+    tm = etree.SubElement(dt, hp("textMargin"))
+    tm.set("left", "283")
+    tm.set("right", "283")
+    tm.set("top", "283")
+    tm.set("bottom", "283")
+
+    # 4 corner points
+    etree.SubElement(rect, hc("pt0"), x="0", y="0")
+    etree.SubElement(rect, hc("pt1"), x=str(w), y="0")
+    etree.SubElement(rect, hc("pt2"), x=str(w), y=str(h))
+    etree.SubElement(rect, hc("pt3"), x="0", y=str(h))
+
+    # sz (크기)
+    sz = etree.SubElement(rect, hp("sz"))
+    sz.set("width", str(w))
+    sz.set("widthRelTo", "ABSOLUTE")
+    sz.set("height", str(h))
+    sz.set("heightRelTo", "ABSOLUTE")
+    sz.set("protect", "0")
+
+    # pos (인라인 배치: treatAsChar=1)
+    pos = etree.SubElement(rect, hp("pos"))
+    pos.set("treatAsChar", "1")
+    pos.set("affectLSpacing", "0")
+    pos.set("flowWithText", "1")
+    pos.set("allowOverlap", "0")
+    pos.set("holdAnchorAndSO", "0")
+    pos.set("vertRelTo", "PARA")
+    pos.set("horzRelTo", "PARA")
+    pos.set("vertAlign", "TOP")
+    pos.set("horzAlign", "LEFT")
+    pos.set("vertOffset", "0")
+    pos.set("horzOffset", "0")
+
+    etree.SubElement(rect, hp("outMargin"), left="0", right="0", top="0", bottom="0")
+
+    sc = etree.SubElement(rect, hp("shapeComment"))
+    sc.text = "글상자"
+
+    # 빈 t (rect 뒤)
+    etree.SubElement(run, hp("t"))
 
     return p
 
@@ -1620,8 +1849,9 @@ def build_section(json_data, base_section_path=None, template=None,
 
     sec = etree.Element(hs("sec"), nsmap=NSMAP)
 
-    # 첫 문단: secPr
-    secpr_p = make_secpr_paragraph(idgen, base_section_path)
+    # 첫 문단: secPr (다단 설정 포함)
+    columns = json_data.get("columns")
+    secpr_p = make_secpr_paragraph(idgen, base_section_path, columns=columns)
     sec.append(secpr_p)
 
     # 머리말/꼬리말 삽입 (secPr 문단 바로 뒤)
@@ -1736,6 +1966,11 @@ def build_section(json_data, base_section_path=None, template=None,
             img_p, _img_info = make_image_paragraph(idgen, item,
                                                      body_width=body_width)
             sec.append(img_p)
+
+        elif item_type == "textbox":
+            sec.append(make_textbox_paragraph(idgen, item,
+                                               body_width=body_width,
+                                               registry=registry))
 
         elif item_type == "hyperlink":
             sec.append(make_hyperlink_paragraph(idgen, item, registry=registry))

@@ -284,6 +284,10 @@ class PropertyRegistry:
             normalized["tabPrIDRef"] = str(spec["tabPrIDRef"])
         if "borderFillIDRef" in spec:
             normalized["borderFillIDRef"] = str(spec["borderFillIDRef"])
+        # borderFill dict → resolve_borderFill → ID 자동 할당
+        if "borderFill" in spec and isinstance(spec["borderFill"], dict):
+            bf_id = self.resolve_borderFill(spec["borderFill"])
+            normalized["borderFillIDRef"] = str(bf_id)
         if "snapToGrid" in spec:
             normalized["snapToGrid"] = str(spec["snapToGrid"])
         if "breakLatinWord" in spec:
