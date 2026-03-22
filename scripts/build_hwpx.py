@@ -36,7 +36,6 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from lxml import etree
-
 from property_registry import PropertyRegistry
 
 # Resolve paths relative to this script

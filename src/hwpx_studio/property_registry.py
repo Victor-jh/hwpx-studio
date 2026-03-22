@@ -20,10 +20,6 @@ LLM이 JSON에서 인라인으로 지정한 서식 스펙을 동적으로 header
 
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import dataclass, field
-from typing import Any
-
 from lxml import etree
 
 # ── 네임스페이스 ────────────────────────────────────────────────

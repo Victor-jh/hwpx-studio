@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 import zipfile
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import List, Tuple

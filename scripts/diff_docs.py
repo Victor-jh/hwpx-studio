@@ -7,7 +7,6 @@
 
 import argparse
 import difflib
-import sys
 import zipfile
 from io import BytesIO
 

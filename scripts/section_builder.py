@@ -26,11 +26,9 @@ import json
 import mimetypes
 import struct
 import sys
-from copy import deepcopy
 from pathlib import Path
 
 from lxml import etree
-
 from property_registry import PropertyRegistry
 
 HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
@@ -1017,8 +1015,12 @@ def make_textbox_paragraph(idgen, item, body_width=None, registry=None):
     ri = etree.SubElement(rect, hp("renderingInfo"))
     for mat_tag in ("transMatrix", "scaMatrix", "rotMatrix"):
         mat = etree.SubElement(ri, hc(mat_tag))
-        mat.set("e1", "1"); mat.set("e2", "0"); mat.set("e3", "0")
-        mat.set("e4", "0"); mat.set("e5", "1"); mat.set("e6", "0")
+        mat.set("e1", "1")
+        mat.set("e2", "0")
+        mat.set("e3", "0")
+        mat.set("e4", "0")
+        mat.set("e5", "1")
+        mat.set("e6", "0")
 
     # lineShape (테두리)
     ls = etree.SubElement(rect, hp("lineShape"))
@@ -2396,7 +2398,7 @@ def _make_custom_secpr(idgen, base_section_path, sec_opts):
     return p
 
 
-def build_multi_sections(json_data, base_section_path=None, template=None):
+def build_multi_sections(json_data, base_section_path=None, template=None, registry=None):
     """JSON의 "sections" 배열에서 복수 section XML을 생성.
 
     Returns:
@@ -2437,7 +2439,7 @@ def build_multi_sections(json_data, base_section_path=None, template=None):
             content = auto_spacing(content)
 
         for item in content:
-            elements = _build_item(idgen, item, body_width, template)
+            elements = _build_item(idgen, item, body_width, template, registry=registry)
             for el in elements:
                 sec.append(el)
 
@@ -2447,7 +2449,7 @@ def build_multi_sections(json_data, base_section_path=None, template=None):
     return results
 
 
-def _build_item(idgen, item, body_width, template):
+def _build_item(idgen, item, body_width, template, registry=None):
     """단일 블록 아이템을 파싱해서 요소 리스트를 반환.
     build_section의 dispatch 로직을 재사용 가능한 함수로 분리."""
     item_type = item.get("type", "text")
@@ -2658,7 +2660,7 @@ def main():
 
     # 다중 섹션 감지
     if "sections" in data:
-        results = build_multi_sections(data, base, template=args.template)
+        results = build_multi_sections(data, base, template=args.template, registry=registry)
         out_dir = Path(args.output)
         out_dir.mkdir(parents=True, exist_ok=True)
         for fname, tree in results:

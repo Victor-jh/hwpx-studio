@@ -36,18 +36,12 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from lxml import etree
-
-try:
-    from hwpx_studio.property_registry import PropertyRegistry
-except ImportError:
-    from property_registry import PropertyRegistry
+from property_registry import PropertyRegistry
 
 # Resolve paths relative to this script
 SCRIPT_DIR = Path(__file__).resolve().parent
-# 패키지 모드: src/hwpx_studio/templates/, Skill 모드: scripts/../templates/
-_PKG_TEMPLATES = SCRIPT_DIR / "templates"
-_SKILL_TEMPLATES = SCRIPT_DIR.parent / "templates"
-TEMPLATES_DIR = _PKG_TEMPLATES if _PKG_TEMPLATES.is_dir() else _SKILL_TEMPLATES
+SKILL_DIR = SCRIPT_DIR.parent
+TEMPLATES_DIR = SKILL_DIR / "templates"
 BASE_DIR = TEMPLATES_DIR / "base"
 
 AVAILABLE_TEMPLATES = ["gonmun", "report", "minutes", "kcup", "proposal"]

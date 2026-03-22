@@ -11,12 +11,13 @@ Usage:
     python3 analyze_template.py <input.hwpx> --extract-header /tmp/ref_header.xml
 """
 
-import sys
-import os
-import tempfile
-import shutil
-import zipfile
 import argparse
+import os
+import shutil
+import sys
+import tempfile
+import zipfile
+
 from lxml import etree
 
 NS = {
@@ -123,11 +124,8 @@ def analyze_paraprops(root):
     lines = ["▶ paraPr (문단 스타일)"]
     for pp in root.findall('.//hh:paraPr', NS):
         pid = pp.get('id')
-        tabref = pp.get('tabPrIDRef', '0')
-
         align = pp.find('hh:align', NS)
         h_align = align.get('horizontal', '?') if align is not None else '?'
-        v_align = align.get('vertical', '?') if align is not None else '?'
 
         heading = pp.find('hh:heading', NS)
         h_type = heading.get('type', 'NONE') if heading is not None else 'NONE'
@@ -240,9 +238,6 @@ def analyze_table(tbl, indent=""):
     cols = int(tbl.get('colCnt', '0'))
     tbl_id = tbl.get('id', '?')
     bf = tbl.get('borderFillIDRef', '?')
-    repeat_header = tbl.get('repeatHeader', '0')
-    page_break = tbl.get('pageBreak', '?')
-
     sz = tbl.find('hp:sz', NS)
     w = sz.get('width', '?') if sz is not None else '?'
     h = sz.get('height', '?') if sz is not None else '?'

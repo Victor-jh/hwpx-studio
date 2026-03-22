@@ -314,9 +314,7 @@ def _detect_header_footer(p_el) -> Optional[dict]:
                                     text_parts.append("{{total_pages}}")
                 hf_info["text"] = "".join(text_parts)
 
-                # align 추정
-                pp_id = hf_info.get("paraPr", 0)
-                # align은 paraPr에서 가져와야 하지만 여기서는 단순 추정
+                # align 추정 (paraPr에서 가져와야 하지만 여기서는 단순 추정)
                 align = "center" if hf_type == "header" else "right"
                 hf_info["align"] = align
 
@@ -397,7 +395,6 @@ def _parse_table(tbl) -> dict:
 
     # 기본 속성
     col_count = int(tbl.get("colCnt", "1"))
-    row_count = int(tbl.get("rowCnt", "1"))
     result["colCount"] = col_count
 
     bf_ref = tbl.get("borderFillIDRef", "3")
@@ -414,7 +411,6 @@ def _parse_table(tbl) -> dict:
         row_cells = []
         for tc in tr.findall(_hp("tc")):
             is_header = tc.get("header", "0") == "1"
-            bf = tc.get("borderFillIDRef", "3")
 
             # 셀 주소
             addr = tc.find(_hp("cellAddr"))

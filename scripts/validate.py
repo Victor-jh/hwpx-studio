@@ -104,7 +104,7 @@ def main() -> None:
         sys.exit(1)
     else:
         print(f"VALID: {args.input}")
-        print(f"  All structural checks passed.")
+        print("  All structural checks passed.")
 
 
 if __name__ == "__main__":

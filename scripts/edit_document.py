@@ -38,10 +38,8 @@ import argparse
 import json
 import re
 import sys
-import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any, Optional
 
 from lxml import etree
 
@@ -233,8 +231,7 @@ class HWPXEditor:
         root, content_paras = self._get_content_paragraphs(section_idx)
 
         # section_builder로 임시 섹션 생성하여 문단 추출
-        from section_builder import build_section, IDGen
-        idgen = IDGen()
+        from section_builder import build_section
         temp_json = {"blocks": [block_json], "auto_spacing": False}
         temp_sec = build_section(temp_json)
 
@@ -309,8 +306,7 @@ class HWPXEditor:
         parent_idx = list(root).index(target)
 
         # 새 블록 생성
-        from section_builder import build_section, IDGen
-        idgen = IDGen()
+        from section_builder import build_section
         temp_json = {"blocks": [block_json], "auto_spacing": False}
         temp_sec = build_section(temp_json)
 
