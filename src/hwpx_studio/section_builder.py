@@ -29,7 +29,11 @@ import sys
 from pathlib import Path
 
 from lxml import etree
-from property_registry import PropertyRegistry
+
+try:
+    from hwpx_studio.property_registry import PropertyRegistry
+except ImportError:
+    from property_registry import PropertyRegistry
 
 HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
 HS = "http://www.hancom.co.kr/hwpml/2011/section"

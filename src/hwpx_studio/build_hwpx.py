@@ -36,7 +36,11 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from lxml import etree
-from property_registry import PropertyRegistry
+
+try:
+    from hwpx_studio.property_registry import PropertyRegistry
+except ImportError:
+    from property_registry import PropertyRegistry
 
 # Resolve paths relative to this script
 SCRIPT_DIR = Path(__file__).resolve().parent
