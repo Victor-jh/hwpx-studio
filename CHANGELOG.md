@@ -1,13 +1,44 @@
 # HWPX Skill CHANGELOG
 
 ## 현재 상태
-- 버전: v1.5 (P2: 글상자 + 다단 + 문단배경)
+- 버전: v1.6 (P3: 캡션 + 책갈피 + 필드)
 - Git: https://github.com/Victor-jh/hwpxskill (forked from Canine89/hwpxskill)
 - Cowork 경로: ~/HWPX Skill Dev
 - 스크립트: build_hwpx.py, analyze_template.py, section_builder.py, create_document.py, property_registry.py, diff_docs.py, validate.py, page_guard.py, text_extract.py, office/unpack.py, office/pack.py
 - 템플릿: base, gonmun, report, minutes, proposal, **kcup**
-- JSON 타입: 16 기본 + 16 KCUP 전용 = 32개
+- JSON 타입: 19 기본 + 16 KCUP 전용 = 35개
 - 동적 서식: charPr/paraPr/borderFill을 JSON dict로 인라인 지정 가능
+
+## 2026-03-22 (Cowork 세션 #6) — P3: 캡션 + 책갈피 + 필드
+
+### 캡션 (Caption) — `caption` 블록 타입 (기본 타입 16→19개)
+- 이미지·표 아래 설명 문단: `"그림 1. 설명"` 형태
+- `label`: 접두어 (그림/표/수식), `num`: 번호 (생략 시 자동 증가)
+- 모든 한글 템플릿 내장 캡션 스타일 (styleIDRef=22, paraPr=19) 활용
+
+### 책갈피 (Bookmark) — `bookmark` 블록 타입
+- fieldBegin/fieldEnd 패턴 (type="BOOKMARK") — 하이퍼링크와 동일 구조
+- `name`: 책갈피 이름 (필수), `text`: 표시 텍스트 (선택)
+- prefix/suffix, charPr/paraPr 지원
+- 포인트 책갈피 (text 생략) 가능
+
+### 필드 (Field) — `field` 블록 타입
+- `field_type`: date, page_number, total_pages
+- date: `hp:fieldBegin type="DATE"` + 포맷 파라미터
+  - format: "yyyy-MM-dd", "yyyy년 M월 d일", "yyyy.MM.dd" 등
+  - 빌드 시 현재 날짜로 표시 텍스트 자동 생성
+- page_number/total_pages: `hp:autoNum numType="PAGE"/"TOTAL_PAGE"`
+  - 머리말/꼬리말과 동일한 autoNum 메커니즘 재활용
+
+### 검증 통과
+- 캡션 3종 (그림/표/자동번호) 빌드 + validate ✅
+- 책갈피 3종 (텍스트/prefix+suffix/빈 포인트) + validate ✅
+- 필드 5종 (date×3 + page_number + total_pages) + validate ✅
+- P3 통합 테스트 (caption+bookmark+field+기존 블록 회귀) ✅
+- **한컴독스 Web 에디터 렌더링 정상 확인** ✅
+
+### 산출물
+- p3_test.hwpx — P3 통합 테스트 문서
 
 ## 2026-03-22 (Cowork 세션 #5) — P2: 글상자 + 다단 + 문단배경
 

@@ -3,12 +3,15 @@
 
 COWORK_CONTEXT.md 섹션 6 스펙 기반 재작성 + KCUP 팀장 대응용 스펙 v1.1.
 
-지원 타입 (공통 16):
+지원 타입 (공통 19):
   text, empty, heading, bullet, numbered, indent, note,
   table (colRatios, 셀 병합, 다중 run, 셀 내 다중 문단),
   image (인라인 이미지 삽입, BinData 연동),
   hyperlink, text_footnote, text_endnote, footnote,
   textbox (글상자, hp:rect 기반 인라인 배치),
+  caption (캡션, styleIDRef=22 기반),
+  bookmark (책갈피, fieldBegin/fieldEnd type=BOOKMARK),
+  field (날짜/쪽번호/전체쪽수 필드),
   signature, label_value, pagebreak
 
 KCUP 전용 타입 (16):
@@ -1104,6 +1107,273 @@ def make_textbox_paragraph(idgen, item, body_width=None, registry=None):
     return p
 
 
+# ── 캡션 (Caption) ──────────────────────────────────────────────
+
+def make_caption_paragraph(idgen, item, registry=None):
+    """캡션 블록: 이미지·표 아래에 붙는 설명 문단.
+
+    JSON 스펙:
+        {
+            "type": "caption",
+            "label": "그림",        (선택: 그림/표/수식, 기본 "그림")
+            "num": 1,               (선택: 번호, 생략 시 자동 증가)
+            "text": "설명 텍스트",   (필수)
+            "charPr": {...},        (선택)
+            "paraPr": {...}         (선택)
+        }
+
+    styleIDRef=22 ("캡션" 스타일, 모든 한글 템플릿에 기본 내장).
+    paraPr=19 (캡션 기본 문단 속성).
+    """
+    label = item.get("label", "그림")
+    num = item.get("num")
+    text = item.get("text", "")
+
+    # 캡션 번호 자동 증가
+    if num is None:
+        num = _next_caption_num(label)
+
+    # "그림 1. 설명" 형태로 조합
+    full_text = f"{label} {num}. {text}" if text else f"{label} {num}."
+
+    cp = _resolve_cp(item, 0, registry)
+    pp = _resolve_pp(item, 19, registry)  # paraPr=19 (캡션 기본)
+
+    return make_paragraph(idgen, paraPr=pp, charPr=cp,
+                          text=full_text, styleIDRef="22")
+
+
+# 캡션 번호 자동 카운터 (레이블별)
+_CAPTION_COUNTERS = {}
+
+
+def _next_caption_num(label="그림"):
+    """캡션 레이블별 자동 번호 증가."""
+    global _CAPTION_COUNTERS
+    _CAPTION_COUNTERS[label] = _CAPTION_COUNTERS.get(label, 0) + 1
+    return _CAPTION_COUNTERS[label]
+
+
+# ── 책갈피 (Bookmark) ──────────────────────────────────────────
+
+def make_bookmark_runs(idgen, name, display_text=None, charPr=0):
+    """책갈피용 hp:run 3개를 생성 (fieldBegin/fieldEnd 패턴).
+
+    JSON 스펙 (블록 또는 runs 내부에서 사용):
+        {
+            "type": "bookmark",
+            "name": "bookmark_name",   (필수: 책갈피 이름)
+            "text": "표시 텍스트",      (선택: 생략 시 빈 책갈피)
+            "charPr": 0
+        }
+
+    Returns: [run_begin, run_text, run_end] — 3개의 hp:run elements
+    """
+    text = display_text or ""
+    begin_id = idgen.next()
+    field_id = _next_field_id()
+
+    # 1) fieldBegin run — type="BOOKMARK"
+    run_begin = etree.Element(hp("run"))
+    run_begin.set("charPrIDRef", "0")
+    ctrl_begin = etree.SubElement(run_begin, hp("ctrl"))
+    fb = etree.SubElement(ctrl_begin, hp("fieldBegin"))
+    fb.set("id", begin_id)
+    fb.set("type", "BOOKMARK")
+    fb.set("name", name)
+    fb.set("editable", "0")
+    fb.set("dirty", "0")
+    fb.set("zorder", "-1")
+    fb.set("fieldid", field_id)
+    fb.set("metaTag", "")
+
+    params = etree.SubElement(fb, hp("parameters"))
+    params.set("cnt", "1")
+    params.set("name", "")
+    _add_param(params, "stringParam", "BookmarkName", name)
+
+    # 2) 표시 텍스트 run (빈 텍스트도 가능 — 포인트 책갈피)
+    run_text = etree.Element(hp("run"))
+    run_text.set("charPrIDRef", str(charPr))
+    t = etree.SubElement(run_text, hp("t"))
+    if text:
+        t.text = text
+
+    # 3) fieldEnd run
+    run_end = etree.Element(hp("run"))
+    run_end.set("charPrIDRef", "0")
+    ctrl_end = etree.SubElement(run_end, hp("ctrl"))
+    fe = etree.SubElement(ctrl_end, hp("fieldEnd"))
+    fe.set("beginIDRef", begin_id)
+    fe.set("fieldid", field_id)
+    etree.SubElement(run_end, hp("t"))
+
+    return [run_begin, run_text, run_end]
+
+
+def make_bookmark_paragraph(idgen, item, registry=None):
+    """책갈피 블록을 hp:p로 생성.
+
+    JSON 스펙:
+        {
+            "type": "bookmark",
+            "name": "my_bookmark",
+            "text": "책갈피된 텍스트",  (선택)
+            "prefix": "참조: ",         (선택)
+            "suffix": "",               (선택)
+            "charPr": 0,
+            "paraPr": 0
+        }
+    """
+    name = item.get("name", "bookmark")
+    text = item.get("text", "")
+    prefix = item.get("prefix", "")
+    suffix = item.get("suffix", "")
+
+    cp = _resolve_cp(item, 0, registry)
+    pp = _resolve_pp(item, 0, registry)
+
+    runs = []
+
+    # prefix run
+    if prefix:
+        runs.append(make_run(cp, prefix))
+
+    # 책갈피 runs
+    bm_runs = make_bookmark_runs(idgen, name, display_text=text, charPr=cp)
+    runs.extend(bm_runs)
+
+    # suffix run
+    if suffix:
+        runs.append(make_run(cp, suffix))
+
+    return make_paragraph(idgen, paraPr=pp, runs=runs)
+
+
+# ── 필드: 날짜/쪽번호 (Field: Date/PageNumber) ──────────────────
+
+def _build_date_field_runs(idgen, fmt="yyyy-MM-dd", display=None):
+    """날짜 필드용 hp:run 3개 생성 (fieldBegin type=DATE).
+
+    fmt: 날짜 형식 문자열 (한컴 DATE 필드 포맷)
+         - "yyyy-MM-dd"  → 2026-03-22
+         - "yyyy년 M월 d일" → 2026년 3월 22일
+         - "yyyy.MM.dd"  → 2026.03.22
+    display: 표시 텍스트 (생략 시 현재 날짜로 자동 생성)
+
+    Returns: [run_begin, run_text, run_end]
+    """
+    from datetime import date
+    if display is None:
+        today = date.today()
+        # 포맷 문자열에서 간단한 치환
+        display = fmt.replace("yyyy", str(today.year))
+        display = display.replace("MM", f"{today.month:02d}")
+        display = display.replace("M", str(today.month))
+        display = display.replace("dd", f"{today.day:02d}")
+        display = display.replace("d", str(today.day))
+
+    begin_id = idgen.next()
+    field_id = _next_field_id()
+
+    # 1) fieldBegin
+    run_begin = etree.Element(hp("run"))
+    run_begin.set("charPrIDRef", "0")
+    ctrl = etree.SubElement(run_begin, hp("ctrl"))
+    fb = etree.SubElement(ctrl, hp("fieldBegin"))
+    fb.set("id", begin_id)
+    fb.set("type", "DATE")
+    fb.set("name", "")
+    fb.set("editable", "0")
+    fb.set("dirty", "0")
+    fb.set("zorder", "-1")
+    fb.set("fieldid", field_id)
+    fb.set("metaTag", "")
+
+    params = etree.SubElement(fb, hp("parameters"))
+    params.set("cnt", "2")
+    params.set("name", "")
+    _add_param(params, "stringParam", "Format", fmt)
+    _add_param(params, "integerParam", "DateType", "0")  # 0=작성일
+
+    # 2) 표시 텍스트
+    run_text = etree.Element(hp("run"))
+    run_text.set("charPrIDRef", "0")
+    t = etree.SubElement(run_text, hp("t"))
+    t.text = display
+
+    # 3) fieldEnd
+    run_end = etree.Element(hp("run"))
+    run_end.set("charPrIDRef", "0")
+    ctrl_end = etree.SubElement(run_end, hp("ctrl"))
+    fe = etree.SubElement(ctrl_end, hp("fieldEnd"))
+    fe.set("beginIDRef", begin_id)
+    fe.set("fieldid", field_id)
+    etree.SubElement(run_end, hp("t"))
+
+    return [run_begin, run_text, run_end]
+
+
+def _build_page_number_runs(idgen, num_type="PAGE", display="1"):
+    """쪽 번호 필드용 hp:run (autoNum 기반).
+
+    num_type: PAGE (현재 쪽), TOTAL_PAGE (전체 쪽수)
+    display: 기본 표시 텍스트 (렌더링 시 실제 페이지로 대체됨)
+
+    Returns: [run] — autoNum ctrl + 빈 t를 포함하는 단일 run
+    """
+    run = etree.Element(hp("run"))
+    run.set("charPrIDRef", "0")
+
+    ctrl = _build_autonum_element(num_type)
+    run.append(ctrl)
+    etree.SubElement(run, hp("t"))
+
+    return [run]
+
+
+def make_field_paragraph(idgen, item, registry=None):
+    """필드 블록을 hp:p로 생성.
+
+    JSON 스펙:
+        {
+            "type": "field",
+            "field_type": "date",          (필수: date/page_number/total_pages)
+            "format": "yyyy-MM-dd",        (date 전용: 날짜 형식)
+            "display": "2026-03-22",       (선택: 기본 표시 텍스트)
+            "prefix": "작성일: ",           (선택)
+            "suffix": "",                  (선택)
+            "charPr": 0,
+            "paraPr": 0
+        }
+    """
+    field_type = item.get("field_type", "date")
+    prefix = item.get("prefix", "")
+    suffix = item.get("suffix", "")
+
+    cp = _resolve_cp(item, 0, registry)
+    pp = _resolve_pp(item, 0, registry)
+
+    runs = []
+
+    if prefix:
+        runs.append(make_run(cp, prefix))
+
+    if field_type == "date":
+        fmt = item.get("format", "yyyy-MM-dd")
+        display = item.get("display")
+        runs.extend(_build_date_field_runs(idgen, fmt=fmt, display=display))
+    elif field_type == "page_number":
+        runs.extend(_build_page_number_runs(idgen, "PAGE"))
+    elif field_type == "total_pages":
+        runs.extend(_build_page_number_runs(idgen, "TOTAL_PAGE"))
+
+    if suffix:
+        runs.append(make_run(cp, suffix))
+
+    return make_paragraph(idgen, paraPr=pp, runs=runs)
+
+
 # ── 하이퍼링크 ──────────────────────────────────────────────────
 
 _FIELD_ID_COUNTER = 627600000  # fieldBegin/fieldEnd 공유 ID 시작값
@@ -1977,6 +2247,15 @@ def build_section(json_data, base_section_path=None, template=None,
 
         elif item_type in ("text_footnote", "text_endnote", "footnote"):
             sec.append(make_text_with_footnote(idgen, item, registry=registry))
+
+        elif item_type == "caption":
+            sec.append(make_caption_paragraph(idgen, item, registry=registry))
+
+        elif item_type == "bookmark":
+            sec.append(make_bookmark_paragraph(idgen, item, registry=registry))
+
+        elif item_type == "field":
+            sec.append(make_field_paragraph(idgen, item, registry=registry))
 
         # ── KCUP 전용 타입 ────────────────────────────────
         elif item_type == "kcup_box":
