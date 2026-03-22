@@ -23,44 +23,303 @@ except ImportError:
 
 # ── CSS ────────────────────────────────────────────────────────────
 _CSS = """\
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-    font-family: 'Malgun Gothic', '맑은 고딕', 'Apple SD Gothic Neo', sans-serif;
-    max-width: 210mm; margin: 20mm auto; padding: 20mm 30mm;
-    background: #f5f5f5; color: #222; line-height: 1.7; font-size: 11.5pt;
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+:root {
+    --body-font: 'Noto Sans KR', '맑은 고딕', sans-serif;
+    --body-size: 14pt;
+    --small-size: 12pt;
+    --spacing-color: transparent;
+    --box-accent: #2c3e50;
+    --o-indent: 28pt;
+    --dash-indent: 48pt;
+    --line-height: 1.65;
+    --page-bg: #fff;
+    --shadow: 0 2px 12px rgba(0,0,0,.08);
 }
-@media print { body { margin: 0; padding: 20mm 30mm 15mm 30mm; background: #fff; } }
-.page { background: #fff; padding: 25mm 30mm; box-shadow: 0 1px 4px rgba(0,0,0,.12);
-         min-height: 297mm; margin-bottom: 10mm; }
-h1 { font-size: 18pt; font-weight: 700; margin: 16pt 0 8pt; border-bottom: 2px solid #333; padding-bottom: 4pt; }
-h2 { font-size: 15pt; font-weight: 700; margin: 14pt 0 6pt; }
-h3 { font-size: 13pt; font-weight: 700; margin: 12pt 0 4pt; }
-p { margin: 4pt 0; }
-.bullet { padding-left: 20pt; }
-.bullet::before { content: '●'; margin-left: -14pt; margin-right: 6pt; font-size: 8pt; vertical-align: middle; }
-.numbered { padding-left: 20pt; }
-.indent { padding-left: 30pt; }
-.note { background: #f8f8f0; border-left: 3px solid #c0a040; padding: 8pt 12pt; margin: 6pt 0; font-size: 10.5pt; }
-.signature { text-align: right; margin-top: 20pt; font-weight: 600; }
-.label-value { display: flex; gap: 12pt; margin: 3pt 0; }
-.label-value .label { font-weight: 700; min-width: 80pt; color: #555; }
-.pagebreak { border-top: 1px dashed #ccc; margin: 20pt 0; page-break-after: always; }
-table { border-collapse: collapse; width: 100%; margin: 8pt 0; font-size: 10.5pt; }
-th, td { border: 1px solid #999; padding: 5pt 8pt; text-align: left; }
-th { background: #e8e8e8; font-weight: 700; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: var(--body-font);
+    font-size: var(--body-size);
+    line-height: var(--line-height);
+    color: #1a1a1a;
+    background: #eef0f2;
+    -webkit-font-smoothing: antialiased;
+}
+
+.page {
+    max-width: 740px;
+    margin: 40px auto;
+    padding: 72px 64px 60px;
+    background: var(--page-bg);
+    box-shadow: var(--shadow);
+    border-radius: 2px;
+    min-height: 900px;
+}
+
+@media print {
+    body { background: #fff; }
+    .page { margin: 0; padding: 25mm 30mm 20mm; box-shadow: none; max-width: none; }
+    .meta-bar { display: none; }
+}
+
+@media (max-width: 780px) {
+    .page { margin: 0; padding: 32px 24px 28px; border-radius: 0; }
+}
+
+/* ── 메타 바 ── */
+.meta-bar {
+    font-size: 9pt; color: #999; padding-bottom: 12px;
+    margin-bottom: 24px; border-bottom: 1px solid #eee;
+    display: flex; justify-content: space-between;
+}
+
+/* ── 일반 문단 ── */
+p { margin: 3pt 0; }
+h1 { font-size: 18pt; font-weight: 700; margin: 20pt 0 10pt;
+     border-bottom: 2.5px solid #222; padding-bottom: 6pt; }
+h2 { font-size: 15pt; font-weight: 700; margin: 16pt 0 8pt; }
+h3 { font-size: 13pt; font-weight: 600; margin: 12pt 0 6pt; }
+
+/* ── 일반 블록 ── */
+.bullet { padding-left: 22pt; position: relative; margin: 3pt 0; }
+.bullet::before { content: '●'; position: absolute; left: 6pt; font-size: 7pt;
+                   top: 0.45em; color: #555; }
+.numbered { padding-left: 22pt; margin: 3pt 0; }
+.indent { padding-left: 32pt; margin: 3pt 0; }
+.note { background: #f7f7f2; border-left: 3px solid #b8a040; padding: 10pt 14pt;
+        margin: 8pt 0; font-size: 11pt; border-radius: 2px; }
+.signature { text-align: right; margin-top: 24pt; font-weight: 600; font-size: 13pt; }
+.label-value { display: flex; gap: 14pt; margin: 3pt 0; }
+.label-value .lbl { font-weight: 700; min-width: 80pt; color: #444; flex-shrink: 0; }
+.pagebreak { border-top: 1px dashed #d0d0d0; margin: 24pt 0; page-break-after: always; }
+
+/* ── 표 ── */
+table { border-collapse: collapse; width: 100%; margin: 10pt 0; font-size: 10.5pt; }
+th, td { border: 1px solid #bbb; padding: 6pt 10pt; text-align: left; vertical-align: middle; }
+th { background: #e6e6e6; font-weight: 600; }
 tr:nth-child(even) td { background: #fafafa; }
-a { color: #1a5ab8; }
-.bookmark { background: #fff3cd; padding: 1px 4px; border-radius: 2px; }
-.footnote-ref { font-size: 8pt; vertical-align: super; color: #c00; }
-.footnotes { border-top: 1px solid #ccc; margin-top: 20pt; padding-top: 8pt; font-size: 9.5pt; color: #555; }
-.meta { color: #888; font-size: 9pt; margin-bottom: 10pt; }
+
+/* ── 링크/북마크/각주 ── */
+a { color: #1a6bc4; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.bookmark { background: #fff8e1; padding: 1px 6px; border-radius: 3px; font-size: 0.9em; }
+.footnote-ref { font-size: 8pt; vertical-align: super; color: #c22; cursor: help; }
+.footnotes { border-top: 1px solid #ddd; margin-top: 28pt; padding-top: 10pt;
+             font-size: 10pt; color: #666; }
+
+/* ══════════════════════════════════════════════════════════
+   KCUP 전용 스타일 — □ / o / - 계층 구조
+   ══════════════════════════════════════════════════════════ */
+
+/* □ 섹션 헤더 */
+.kcup-box {
+    font-size: 14pt; font-weight: 700; color: var(--box-accent);
+    margin: 0; padding: 10pt 0 6pt 0;
+    border-bottom: 2px solid var(--box-accent);
+    position: relative;
+}
+.kcup-box::before {
+    content: '□';
+    margin-right: 8pt;
+    font-weight: 400;
+}
+/* □ 앞 간격 */
+.kcup-box-gap { height: 18pt; }
+
+/* o 항목 — 키워드+설명 */
+.kcup-o {
+    margin: 0; padding: 2pt 0 2pt var(--o-indent);
+    position: relative; font-size: 14pt;
+}
+.kcup-o::before {
+    content: 'o';
+    position: absolute; left: 10pt; top: 2pt;
+    font-weight: 400; color: #333;
+}
+.kcup-o .kw {
+    font-weight: 700; color: #1a1a1a;
+}
+/* o 앞 간격 */
+.kcup-o-gap { height: 8pt; }
+
+/* o 강조 소제목 */
+.kcup-o-heading {
+    margin: 0; padding: 2pt 0 2pt var(--o-indent);
+    position: relative; font-size: 14pt; font-weight: 700;
+}
+.kcup-o-heading::before {
+    content: 'o';
+    position: absolute; left: 10pt; top: 2pt;
+    font-weight: 400; color: #333;
+}
+/* o소제목 간 넓은 간격 */
+.kcup-o-heading-gap { height: 16pt; }
+
+/* - 항목 */
+.kcup-dash {
+    margin: 0; padding: 2pt 0 2pt var(--dash-indent);
+    position: relative; font-size: 14pt;
+}
+.kcup-dash::before {
+    content: '-';
+    position: absolute; left: 32pt; top: 2pt;
+    font-weight: 700; color: #333;
+}
+.kcup-dash .kw {
+    font-weight: 700; color: #1a1a1a;
+}
+/* - 앞 간격 */
+.kcup-dash-gap { height: 6pt; }
+
+/* kcup 번호항목 ①②③ */
+.kcup-num {
+    margin: 0; padding: 2pt 0 2pt var(--o-indent);
+    position: relative; font-size: 14pt; font-weight: 700;
+}
+
+/* kcup 참고 */
+.kcup-note-line {
+    margin: 0; padding: 2pt 0 2pt var(--o-indent);
+    font-size: var(--small-size); color: #555;
+}
+
+/* kcup 붙임 */
+.kcup-attach {
+    margin: 16pt 0 6pt 0; padding: 8pt 0;
+    font-size: 14pt; font-weight: 400; color: #333;
+    border-top: 1px solid #ccc;
+}
+
+/* kcup 포인터 ☞ */
+.kcup-pointer {
+    margin: 0; padding: 4pt 0 4pt var(--o-indent);
+    font-size: 14pt; font-weight: 700; color: #b33;
+    position: relative;
+}
+.kcup-pointer::before {
+    content: '☞'; position: absolute; left: 8pt; top: 4pt;
+}
+
+/* kcup mixed_run — 일반 텍스트 */
+.kcup-mixed {
+    margin: 0; padding: 2pt 0 2pt var(--o-indent);
+    font-size: 14pt;
+}
+
+/* ── empty (간격줄) ── */
+.empty-line { height: 4pt; }
 """
 
 
-# ── 블록 → HTML ──────────────────────────────────────────────────
+# ── KCUP 블록 렌더러 ─────────────────────────────────────────────
+def _render_kcup(block: dict) -> str:
+    """KCUP 전용 블록을 HTML로 변환."""
+    btype = block.get("type", "")
+    sub = btype.replace("kcup_", "")
+
+    # □ 섹션 헤더
+    if sub == "box":
+        title = escape(block.get("title", block.get("text", "")))
+        return f'<div class="kcup-box-gap"></div>\n<div class="kcup-box">{title}</div>'
+
+    # □ 앞 간격줄
+    if sub == "box_spacing":
+        return '<div class="kcup-box-gap"></div>'
+
+    # o 핵심선행 키워드
+    if sub == "o":
+        kw = block.get("keyword", "")
+        text = escape(block.get("text", ""))
+        if kw:
+            kw_html = f'<span class="kw">({escape(kw)})</span> '
+        else:
+            kw_html = ""
+        return f'<div class="kcup-o-gap"></div>\n<p class="kcup-o">{kw_html}{text}</p>'
+
+    # o 단순 서술
+    if sub == "o_plain":
+        text = escape(block.get("text", ""))
+        return f'<div class="kcup-o-gap"></div>\n<p class="kcup-o">{text}</p>'
+
+    # o 강조 소제목
+    if sub == "o_heading":
+        text = escape(block.get("text", ""))
+        return f'<div class="kcup-o-heading-gap"></div>\n<p class="kcup-o-heading">{text}</p>'
+
+    # o 앞 간격
+    if sub == "o_spacing":
+        return '<div class="kcup-o-gap"></div>'
+
+    # o소제목 간 넓은 간격
+    if sub == "o_heading_spacing":
+        return '<div class="kcup-o-heading-gap"></div>'
+
+    # - 핵심선행 키워드
+    if sub == "dash":
+        kw = block.get("keyword", "")
+        text = escape(block.get("text", ""))
+        if kw:
+            kw_html = f'<span class="kw">({escape(kw)})</span> '
+        else:
+            kw_html = ""
+        return f'<div class="kcup-dash-gap"></div>\n<p class="kcup-dash">{kw_html}{text}</p>'
+
+    # - 단순
+    if sub == "dash_plain":
+        text = escape(block.get("text", ""))
+        return f'<div class="kcup-dash-gap"></div>\n<p class="kcup-dash">{text}</p>'
+
+    # - 간격
+    if sub == "dash_spacing":
+        return '<div class="kcup-dash-gap"></div>'
+
+    # 번호항목 ①②③
+    if sub == "numbered":
+        num = block.get("number", "")
+        text = escape(block.get("text", ""))
+        return f'<div class="kcup-o-gap"></div>\n<p class="kcup-num">{num} {text}</p>'
+
+    # ※ 참고
+    if sub == "note":
+        text = escape(block.get("text", ""))
+        return f'<p class="kcup-note-line">※ {text}</p>'
+
+    # [붙임]
+    if sub == "attachment":
+        text = escape(block.get("text", ""))
+        return f'<div class="kcup-attach">[붙임] {text}</div>'
+
+    # ☞ 포인터
+    if sub == "pointer":
+        text = escape(block.get("text", ""))
+        return f'<p class="kcup-pointer">{text}</p>'
+
+    # mixed_run
+    if sub == "mixed_run":
+        text = escape(block.get("text", ""))
+        return f'<p class="kcup-mixed">{text}</p>'
+
+    # fallback
+    text = escape(block.get("text", ""))
+    return f"<p>{text}</p>" if text else ""
+
+
+# ── 일반 블록 → HTML ─────────────────────────────────────────────
 def _render_block(block: dict, footnotes: list) -> str:
     """단일 블록을 HTML로 변환."""
     btype = block.get("type", "paragraph")
+
+    # KCUP 블록 위임
+    if btype.startswith("kcup_"):
+        return _render_kcup(block)
+
+    # empty (간격줄)
+    if btype == "empty":
+        return '<div class="empty-line"></div>'
+
     text = escape(block.get("text", ""))
 
     # charPr 스타일 적용 (dict가 아닌 경우 무시)
@@ -82,8 +341,8 @@ def _render_block(block: dict, footnotes: list) -> str:
         level = min(max(level, 1), 3)
         return f"<h{level}>{text}</h{level}>"
 
-    if btype == "paragraph" or btype == "text":
-        return f"<p>{text}</p>"
+    if btype in ("paragraph", "text"):
+        return f"<p>{text}</p>" if text else ""
 
     if btype == "bullet":
         return f'<p class="bullet">{text}</p>'
@@ -105,7 +364,10 @@ def _render_block(block: dict, footnotes: list) -> str:
     if btype == "label_value":
         label = escape(block.get("label", ""))
         value = escape(block.get("value", ""))
-        return f'<div class="label-value"><span class="label">{label}</span><span>{value}</span></div>'
+        return (
+            f'<div class="label-value">'
+            f'<span class="lbl">{label}</span><span>{value}</span></div>'
+        )
 
     if btype == "pagebreak":
         return '<div class="pagebreak"></div>'
@@ -131,19 +393,6 @@ def _render_block(block: dict, footnotes: list) -> str:
         alt = escape(block.get("alt", "이미지"))
         return f'<p><em>[{alt}]</em></p>'
 
-    # KCUP 블록들
-    if btype.startswith("kcup_"):
-        sub = btype.replace("kcup_", "")
-        if sub == "box":
-            return f'<div class="note" style="border-left-color:#336;">{text}</div>'
-        if sub in ("o", "dash"):
-            marker = "○" if sub == "o" else "–"
-            return f'<p class="bullet" style="padding-left:24pt;">{marker} {text}</p>'
-        if sub == "numbered":
-            num = block.get("number", "")
-            return f'<p class="numbered">{num}. {text}</p>'
-        return f"<p>{text}</p>"
-
     # fallback
     return f"<p>{text}</p>" if text else ""
 
@@ -154,7 +403,7 @@ def _render_table(block: dict) -> str:
     if not rows:
         return ""
 
-    html = ['<table>']
+    html = ["<table>"]
 
     for i, row in enumerate(rows):
         html.append("<tr>")
@@ -184,6 +433,9 @@ def hwpx_to_html(hwpx_path: str) -> str:
         for sec in data.get("sections", []):
             blocks.extend(sec.get("blocks", []))
 
+    # KCUP 감지
+    is_kcup = any(b.get("type", "").startswith("kcup_") for b in blocks)
+
     footnotes: list[str] = []
     body_parts = []
 
@@ -201,10 +453,13 @@ def hwpx_to_html(hwpx_path: str) -> str:
 
     # 메타 정보
     template = data.get("template", "")
-    meta = '<div class="meta">hwpx-studio preview'
-    if template:
-        meta += f" | template: {template}"
-    meta += f" | {len(blocks)} blocks</div>"
+    style_label = "KCUP" if is_kcup else (template or "general")
+    meta = (
+        f'<div class="meta-bar">'
+        f'<span>hwpx-studio preview</span>'
+        f'<span>{style_label} | {len(blocks)} blocks</span>'
+        f'</div>'
+    )
 
     body = "\n".join(body_parts)
 
