@@ -37,11 +37,9 @@ Usage:
 import argparse
 import json
 import re
-import shutil
 import sys
 import tempfile
 import zipfile
-from copy import deepcopy
 from pathlib import Path
 from typing import Any, Optional
 
