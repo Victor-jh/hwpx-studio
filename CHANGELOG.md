@@ -1,13 +1,51 @@
 # HWPX Skill CHANGELOG
 
 ## 현재 상태
-- 버전: v1.3 (이미지 삽입 + 동적 서식 레지스트리 + 다중 섹션)
+- 버전: v1.4 (P1: 머리말/꼬리말 + 하이퍼링크 + 각주/미주)
 - Git: https://github.com/Victor-jh/hwpxskill (forked from Canine89/hwpxskill)
 - Cowork 경로: ~/HWPX Skill Dev
 - 스크립트: build_hwpx.py, analyze_template.py, section_builder.py, create_document.py, property_registry.py, diff_docs.py, validate.py, page_guard.py, text_extract.py, office/unpack.py, office/pack.py
 - 템플릿: base, gonmun, report, minutes, proposal, **kcup**
-- JSON 타입: 12 기본 + 16 KCUP 전용 = 28개
+- JSON 타입: 15 기본 + 16 KCUP 전용 = 31개
 - 동적 서식: charPr/paraPr/borderFill을 JSON dict로 인라인 지정 가능
+
+## 2026-03-22 (Cowork 세션 #4) — P1: 머리말/꼬리말 + 하이퍼링크 + 각주/미주
+
+### 머리말/꼬리말 (header/footer)
+- JSON 최상위 `"header"` / `"footer"` 키로 정의
+- `{{page}}` → `hp:autoNum numType="PAGE"` (현재 쪽 번호)
+- `{{total_pages}}` → `hp:autoNum numType="TOTAL_PAGE"` (전체 쪽수)
+- align: left/center/right (동적 paraPr 레지스트리 연동)
+- applyPageType: BOTH/EVEN/ODD (기본 BOTH)
+- 다중 섹션에서도 섹션별 또는 전역 header/footer 지원
+- XML 구조: `hp:ctrl > hp:header/footer > hp:subList > hp:p` (hp 네임스페이스)
+
+### 하이퍼링크 (hyperlink)
+- `hyperlink` 블록 타입 추가 (기본 타입 12→13개)
+- `url`: 대상 URL (필수)
+- `text`: 표시 텍스트 (생략 시 URL 표시)
+- `prefix` / `suffix`: 링크 앞뒤 일반 텍스트
+- XML 구조: `hp:fieldBegin type="HYPERLINK"` + `hp:parameters` + `hp:fieldEnd`
+- Command 파라미터: URL 내 콜론 자동 이스케이프 (`\:`)
+
+### 각주/미주 (footnote/endnote)
+- `text_footnote` / `text_endnote` / `footnote` 블록 타입 추가 (기본 타입 13→15개)
+- `text`: 본문 텍스트 (각주 마커가 끝에 붙음)
+- `footnote` / `endnote`: 주석 내용
+- 번호 자동 증가 (문서 내 순차 매김)
+- XML 구조: `hp:ctrl > hp:footNote/endNote > hp:subList > hp:p` (autoNum FOOTNOTE/ENDNOTE)
+- styleIDRef=14 (각주) / styleIDRef=15 (미주) 자동 매핑
+
+### 검증 통과
+- 머리말/꼬리말 빌드 + validate ✅
+- 하이퍼링크 3개 (prefix/suffix 포함) 빌드 + validate ✅
+- 각주 2개 + 미주 1개 빌드 + validate ✅
+- P1 통합 테스트 (header+footer+hyperlink+footnote+endnote) ✅
+- 기존 블록 회귀 테스트 ✅
+
+### 산출물
+- p1_full_test.hwpx — P1 통합 테스트 문서
+- 한컴독스 렌더링 검증 완료 ✅ (머리말/꼬리말, 하이퍼링크, 각주/미주 모두 정상)
 
 ## 2026-03-22 (Cowork 세션 #3) — 이미지 삽입 + 동적 서식 레지스트리 + 다중 섹션
 

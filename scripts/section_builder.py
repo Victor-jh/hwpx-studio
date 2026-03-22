@@ -875,6 +875,428 @@ def make_secpr_paragraph(idgen, base_section_path=None):
     return p
 
 
+# ── 하이퍼링크 ──────────────────────────────────────────────────
+
+_FIELD_ID_COUNTER = 627600000  # fieldBegin/fieldEnd 공유 ID 시작값
+
+
+def _next_field_id():
+    """하이퍼링크 fieldid를 순차 할당."""
+    global _FIELD_ID_COUNTER
+    _FIELD_ID_COUNTER += 1
+    return str(_FIELD_ID_COUNTER)
+
+
+def make_hyperlink_runs(idgen, url, display_text=None, charPr=0):
+    """하이퍼링크용 hp:run 3개를 생성.
+
+    JSON 스펙:
+        {
+            "type": "hyperlink",       (또는 블록 내부 runs에서 사용)
+            "url": "https://...",
+            "text": "표시 텍스트",     (생략 시 url 자체가 표시됨)
+            "charPr": 0               (표시 텍스트의 charPr, 기본 0)
+        }
+
+    Returns: [run_begin, run_text, run_end] — 3개의 hp:run elements
+    """
+    text = display_text or url
+    begin_id = idgen.next()
+    field_id = _next_field_id()
+
+    # 1) fieldBegin run
+    run_begin = etree.Element(hp("run"))
+    run_begin.set("charPrIDRef", "0")
+    ctrl_begin = etree.SubElement(run_begin, hp("ctrl"))
+    fb = etree.SubElement(ctrl_begin, hp("fieldBegin"))
+    fb.set("id", begin_id)
+    fb.set("type", "HYPERLINK")
+    fb.set("name", "")
+    fb.set("editable", "0")
+    fb.set("dirty", "0")
+    fb.set("zorder", "-1")
+    fb.set("fieldid", field_id)
+    fb.set("metaTag", "")
+
+    params = etree.SubElement(fb, hp("parameters"))
+    params.set("cnt", "6")
+    params.set("name", "")
+
+    # Command: URL 내 콜론을 이스케이프 (\:)
+    escaped_url = url.replace(":", "\\:")
+    _add_param(params, "integerParam", "Prop", "0")
+    _add_param(params, "stringParam", "Command", f"{escaped_url};1;0;0;")
+    _add_param(params, "stringParam", "Path", url)
+    _add_param(params, "stringParam", "Category", "HWPHYPERLINK_TYPE_URL")
+    _add_param(params, "stringParam", "TargetType", "HWPHYPERLINK_TARGET_BOOKMARK")
+    _add_param(params, "stringParam", "DocOpenType", "HWPHYPERLINK_JUMP_CURRENTTAB")
+
+    # 2) 표시 텍스트 run
+    run_text = etree.Element(hp("run"))
+    run_text.set("charPrIDRef", str(charPr))
+    t = etree.SubElement(run_text, hp("t"))
+    t.text = text
+
+    # 3) fieldEnd run
+    run_end = etree.Element(hp("run"))
+    run_end.set("charPrIDRef", "0")
+    ctrl_end = etree.SubElement(run_end, hp("ctrl"))
+    fe = etree.SubElement(ctrl_end, hp("fieldEnd"))
+    fe.set("beginIDRef", begin_id)
+    fe.set("fieldid", field_id)
+    etree.SubElement(run_end, hp("t"))
+
+    return [run_begin, run_text, run_end]
+
+
+def _add_param(parent, tag_type, name, value):
+    """hp:parameters에 integerParam/stringParam 추가."""
+    elem = etree.SubElement(parent, hp(tag_type))
+    elem.set("name", name)
+    elem.text = value
+
+
+def make_hyperlink_paragraph(idgen, item, registry=None):
+    """하이퍼링크 블록을 hp:p로 생성.
+
+    JSON 스펙:
+        {
+            "type": "hyperlink",
+            "url": "https://...",
+            "text": "표시 텍스트",
+            "prefix": "방문: ",     (선택: 링크 앞 텍스트)
+            "suffix": " 참조",      (선택: 링크 뒤 텍스트)
+            "charPr": 0,
+            "paraPr": 0
+        }
+    """
+    url = item.get("url", "")
+    display_text = item.get("text", url)
+    prefix = item.get("prefix", "")
+    suffix = item.get("suffix", "")
+    cp = _resolve_cp(item, 0, registry)
+    pp = _resolve_pp(item, 0, registry)
+
+    runs = []
+    if prefix:
+        runs.append(make_run(cp, prefix))
+
+    link_runs = make_hyperlink_runs(idgen, url, display_text, charPr=cp)
+    runs.extend(link_runs)
+
+    if suffix:
+        runs.append(make_run(cp, suffix))
+
+    return make_paragraph(idgen, paraPr=pp, runs=runs)
+
+
+# ── 각주/미주 (footnote/endnote) ──────────────────────────────────
+
+_FOOTNOTE_COUNTER = 0  # 각주 번호 자동 증가
+
+
+def _next_footnote_num():
+    global _FOOTNOTE_COUNTER
+    _FOOTNOTE_COUNTER += 1
+    return _FOOTNOTE_COUNTER
+
+
+def make_footnote_ctrl(idgen, note_text, note_type="footNote"):
+    """각주 또는 미주 hp:ctrl 요소를 생성.
+
+    note_type: "footNote" | "endNote"
+
+    Returns: hp:ctrl element (to be appended to a hp:run)
+    """
+    num = _next_footnote_num()
+    inst_id = idgen.next()
+
+    ctrl = etree.Element(hp("ctrl"))
+    note = etree.SubElement(ctrl, hp(note_type))
+    note.set("number", str(num))
+    note.set("suffixChar", "41")  # ASCII ')' = 0x29 = 41
+    note.set("instId", inst_id)
+
+    sublist = etree.SubElement(note, hp("subList"))
+    sublist.set("id", "")
+    sublist.set("textDirection", "HORIZONTAL")
+    sublist.set("lineWrap", "BREAK")
+    sublist.set("vertAlign", "TOP")
+    sublist.set("linkListIDRef", "0")
+    sublist.set("linkListNextIDRef", "0")
+    sublist.set("textWidth", "0")
+    sublist.set("textHeight", "0")
+    sublist.set("hasTextRef", "0")
+    sublist.set("hasNumRef", "0")
+
+    # 각주 스타일: paraPr=12 (style 기본), styleIDRef=14 (각주), charPr=2
+    style_id = "14" if note_type == "footNote" else "15"
+    inner_p = etree.SubElement(sublist, hp("p"))
+    inner_p.set("id", "0")
+    inner_p.set("paraPrIDRef", "12")
+    inner_p.set("styleIDRef", style_id)
+    inner_p.set("pageBreak", "0")
+    inner_p.set("columnBreak", "0")
+    inner_p.set("merged", "0")
+
+    run = etree.SubElement(inner_p, hp("run"))
+    run.set("charPrIDRef", "2")
+
+    # autoNum (각주 번호)
+    num_ctrl = etree.SubElement(run, hp("ctrl"))
+    autonum = etree.SubElement(num_ctrl, hp("autoNum"))
+    autonum.set("num", str(num))
+    autonum.set("numType", "FOOTNOTE" if note_type == "footNote" else "ENDNOTE")
+    fmt = etree.SubElement(autonum, hp("autoNumFormat"))
+    fmt.set("type", "DIGIT")
+    fmt.set("userChar", "")
+    fmt.set("prefixChar", "")
+    fmt.set("suffixChar", ")")
+    fmt.set("supscript", "0")
+
+    # 각주 텍스트
+    t = etree.SubElement(run, hp("t"))
+    t.text = f" {note_text}"
+
+    return ctrl
+
+
+def make_text_with_footnote(idgen, item, registry=None):
+    """텍스트와 각주를 포함하는 문단 생성.
+
+    JSON 스펙:
+        {
+            "type": "text_footnote",
+            "text": "본문 텍스트",
+            "footnote": "각주 내용",
+            "note_type": "footNote"    (선택: footNote/endNote, 기본 footNote)
+        }
+
+    각주 마커(위첨자 번호)가 텍스트 끝에 자동 삽입됨.
+    """
+    text = item.get("text", "")
+    note_text = item.get("footnote", item.get("endnote", ""))
+    note_type = item.get("note_type", "footNote")
+    if item.get("endnote"):
+        note_type = "endNote"
+    cp = _resolve_cp(item, 0, registry)
+    pp = _resolve_pp(item, 0, registry)
+
+    runs = []
+    # 본문 텍스트 run
+    text_run = make_run(cp, text)
+    runs.append(text_run)
+
+    # 각주 ctrl을 포함하는 run
+    if note_text:
+        fn_run = etree.Element(hp("run"))
+        fn_run.set("charPrIDRef", str(cp))
+        fn_ctrl = make_footnote_ctrl(idgen, note_text, note_type=note_type)
+        fn_run.append(fn_ctrl)
+        etree.SubElement(fn_run, hp("t"))
+        runs.append(fn_run)
+
+    return make_paragraph(idgen, paraPr=pp, runs=runs)
+
+
+# ── 머리말/꼬리말 (header/footer) ──────────────────────────────────
+
+# 정렬 → paraPr 매핑 (base 템플릿 기본 paraPr)
+# center alignment는 별도 paraPr 필요 — 동적 레지스트리로 해결하거나 fallback
+_HF_ALIGN_MAP = {
+    "left": "LEFT",
+    "center": "CENTER",
+    "right": "RIGHT",
+    "justify": "JUSTIFY",
+}
+
+
+def _parse_hf_content(text_template):
+    """머리말/꼬리말 텍스트에서 {{page}}, {{total_pages}} 등의 플레이스홀더를 파싱.
+
+    Returns: list of segments
+        [{"type": "text", "value": "- "},
+         {"type": "page_number"},
+         {"type": "text", "value": " -"}]
+    """
+    import re
+    segments = []
+    pattern = r'\{\{(page|total_pages|page_count)\}\}'
+    last_end = 0
+    for m in re.finditer(pattern, text_template):
+        if m.start() > last_end:
+            segments.append({"type": "text", "value": text_template[last_end:m.start()]})
+        placeholder = m.group(1)
+        if placeholder == "page":
+            segments.append({"type": "page_number"})
+        elif placeholder in ("total_pages", "page_count"):
+            segments.append({"type": "total_pages"})
+        last_end = m.end()
+    if last_end < len(text_template):
+        segments.append({"type": "text", "value": text_template[last_end:]})
+    return segments
+
+
+def _build_autonum_element(num_type="PAGE"):
+    """hp:autoNum 요소 생성.
+
+    num_type: PAGE (쪽 번호), TOTAL_PAGE (전체 쪽수)
+    """
+    ctrl = etree.Element(hp("ctrl"))
+    autonum = etree.SubElement(ctrl, hp("autoNum"))
+    autonum.set("num", "1")
+    autonum.set("numType", num_type)
+    fmt = etree.SubElement(autonum, hp("autoNumFormat"))
+    fmt.set("type", "DIGIT")
+    fmt.set("userChar", "")
+    fmt.set("prefixChar", "")
+    fmt.set("suffixChar", "")
+    fmt.set("supscript", "0")
+    return ctrl
+
+
+def make_header_footer_paragraph(idgen, hf_def, hf_type="header",
+                                  body_width=None, registry=None):
+    """머리말 또는 꼬리말 ctrl을 포함하는 hp:p 요소 생성.
+
+    hf_def (dict):
+        text: str — 콘텐츠 텍스트. {{page}} / {{total_pages}} 플레이스홀더 지원.
+        align: str — left/center/right (기본: center for header, right for footer)
+        applyPageType: str — BOTH/EVEN/ODD (기본: BOTH)
+        charPr: int/dict — 문자 속성 (기본: 1, 9pt 헤더/푸터 스타일)
+        paraPr: int/dict — 문단 속성 (기본: 자동 — align 기반)
+
+    hf_type: "header" | "footer"
+
+    Returns: hp:ctrl element (to be placed inside a hp:run)
+    """
+    bw = body_width or BODY_WIDTH
+    text_template = hf_def.get("text", "{{page}}")
+    align = hf_def.get("align", "center" if hf_type == "header" else "right")
+    apply_page = hf_def.get("applyPageType", "BOTH")
+
+    # charPr/paraPr 해석
+    cp = hf_def.get("charPr", 1)  # 기본: 9pt 머리말 스타일
+    pp = hf_def.get("paraPr", 0)
+
+    # 동적 레지스트리로 paraPr 해석
+    if registry and isinstance(pp, dict):
+        pp = registry.resolve_paraPr(pp)
+    elif isinstance(pp, dict):
+        pp = 0  # fallback
+
+    if registry and isinstance(cp, dict):
+        cp = registry.resolve_charPr(cp)
+    elif isinstance(cp, dict):
+        cp = 1  # fallback
+
+    # 정렬을 위한 동적 paraPr 생성 (align이 지정되었고 pp가 기본값일 때)
+    if align != "justify" and pp == 0 and registry:
+        align_val = _HF_ALIGN_MAP.get(align, "CENTER")
+        pp = registry.resolve_paraPr({"align": align_val, "lineSpacing": 150})
+    elif align != "justify" and pp == 0:
+        # 레지스트리 없이도 paraPr 0은 JUSTIFY인데 center/right 필요
+        # → 하드코딩 대안은 없으므로 registry 사용 권장
+        pass
+
+    # ctrl element 생성
+    ctrl_wrap = etree.Element(hp("ctrl"))
+    hf_elem = etree.SubElement(ctrl_wrap, hp(hf_type))
+    # header/footer id: header=1, footer=2 (convention)
+    hf_id = "1" if hf_type == "header" else "2"
+    hf_elem.set("id", hf_id)
+    hf_elem.set("applyPageType", apply_page)
+
+    # subList
+    sublist = etree.SubElement(hf_elem, hp("subList"))
+    sublist.set("id", "")
+    sublist.set("textDirection", "HORIZONTAL")
+    sublist.set("lineWrap", "BREAK")
+    sublist.set("vertAlign", "TOP" if hf_type == "header" else "BOTTOM")
+    sublist.set("linkListIDRef", "0")
+    sublist.set("linkListNextIDRef", "0")
+    sublist.set("textWidth", str(bw))
+    sublist.set("textHeight", "4252")  # 기본 머리말/꼬리말 높이 (≈15mm)
+    sublist.set("hasTextRef", "0")
+    sublist.set("hasNumRef", "0")
+
+    # 내부 paragraph
+    inner_p = etree.SubElement(sublist, hp("p"))
+    inner_p.set("id", "0")
+    inner_p.set("paraPrIDRef", str(pp))
+    inner_p.set("styleIDRef", "13")  # "머리말" 스타일 (대부분 템플릿에 존재)
+    inner_p.set("pageBreak", "0")
+    inner_p.set("columnBreak", "0")
+    inner_p.set("merged", "0")
+
+    # 콘텐츠 run 생성
+    segments = _parse_hf_content(text_template)
+
+    run = etree.SubElement(inner_p, hp("run"))
+    run.set("charPrIDRef", str(cp))
+
+    for seg in segments:
+        if seg["type"] == "text":
+            t = etree.SubElement(run, hp("t"))
+            t.text = seg["value"]
+        elif seg["type"] == "page_number":
+            autonum_ctrl = _build_autonum_element("PAGE")
+            run.append(autonum_ctrl)
+            etree.SubElement(run, hp("t"))  # 빈 t 요소 (한컴 관례)
+        elif seg["type"] == "total_pages":
+            autonum_ctrl = _build_autonum_element("TOTAL_PAGE")
+            run.append(autonum_ctrl)
+            etree.SubElement(run, hp("t"))
+
+    # 세그먼트가 없으면 빈 t
+    if not segments:
+        etree.SubElement(run, hp("t"))
+
+    return ctrl_wrap
+
+
+def _inject_header_footer(sec, idgen, json_data, body_width=None, registry=None):
+    """build_section에서 호출: JSON의 header/footer 정의를 sec에 삽입.
+
+    머리말/꼬리말 ctrl은 secPr 다음 문단의 run에 배치.
+    """
+    header_def = json_data.get("header")
+    footer_def = json_data.get("footer")
+
+    if not header_def and not footer_def:
+        return
+
+    # 머리말/꼬리말 전용 빈 문단 삽입 (secPr 문단 바로 뒤)
+    hf_p = etree.Element(hp("p"))
+    hf_p.set("id", idgen.next())
+    hf_p.set("paraPrIDRef", "0")
+    hf_p.set("styleIDRef", "0")
+    hf_p.set("pageBreak", "0")
+    hf_p.set("columnBreak", "0")
+    hf_p.set("merged", "0")
+
+    run = etree.SubElement(hf_p, hp("run"))
+    run.set("charPrIDRef", "0")
+
+    if header_def:
+        hf_ctrl = make_header_footer_paragraph(
+            idgen, header_def, hf_type="header",
+            body_width=body_width, registry=registry)
+        run.append(hf_ctrl)
+
+    if footer_def:
+        hf_ctrl = make_header_footer_paragraph(
+            idgen, footer_def, hf_type="footer",
+            body_width=body_width, registry=registry)
+        run.append(hf_ctrl)
+
+    # 빈 t 마무리
+    etree.SubElement(run, hp("t"))
+
+    # secPr 문단(index 0) 바로 뒤에 삽입
+    sec.insert(1, hf_p)
+
+
 # ── KCUP 전용 블록 생성 함수 ──────────────────────────────────────
 
 def _kcup_box_title(title):
@@ -1202,6 +1624,10 @@ def build_section(json_data, base_section_path=None, template=None,
     secpr_p = make_secpr_paragraph(idgen, base_section_path)
     sec.append(secpr_p)
 
+    # 머리말/꼬리말 삽입 (secPr 문단 바로 뒤)
+    _inject_header_footer(sec, idgen, json_data,
+                          body_width=body_width, registry=registry)
+
     # 콘텐츠 항목 처리
     content = json_data.get("blocks", [])
     if not content:
@@ -1310,6 +1736,12 @@ def build_section(json_data, base_section_path=None, template=None,
             img_p, _img_info = make_image_paragraph(idgen, item,
                                                      body_width=body_width)
             sec.append(img_p)
+
+        elif item_type == "hyperlink":
+            sec.append(make_hyperlink_paragraph(idgen, item, registry=registry))
+
+        elif item_type in ("text_footnote", "text_endnote", "footnote"):
+            sec.append(make_text_with_footnote(idgen, item, registry=registry))
 
         # ── KCUP 전용 타입 ────────────────────────────────
         elif item_type == "kcup_box":
@@ -1444,6 +1876,15 @@ def build_multi_sections(json_data, base_section_path=None, template=None):
         secpr_p = _make_custom_secpr(idgen, base_section_path, sec_def)
         sec.append(secpr_p)
 
+        # 머리말/꼬리말 (섹션별 또는 전역 header/footer)
+        hf_data = {}
+        if "header" in sec_def or "header" in json_data:
+            hf_data["header"] = sec_def.get("header", json_data.get("header"))
+        if "footer" in sec_def or "footer" in json_data:
+            hf_data["footer"] = sec_def.get("footer", json_data.get("footer"))
+        if hf_data:
+            _inject_header_footer(sec, idgen, hf_data, body_width=body_width)
+
         # 콘텐츠
         content = sec_def.get("blocks", [])
         if not content:
@@ -1559,6 +2000,12 @@ def _build_item(idgen, item, body_width, template):
         img_p, _img_info = make_image_paragraph(idgen, item,
                                                   body_width=body_width)
         elements.append(img_p)
+
+    elif item_type == "hyperlink":
+        elements.append(make_hyperlink_paragraph(idgen, item))
+
+    elif item_type in ("text_footnote", "text_endnote", "footnote"):
+        elements.append(make_text_with_footnote(idgen, item))
 
     # ── KCUP 전용 타입 ────────────────────────────────
     elif item_type == "kcup_box":

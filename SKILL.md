@@ -91,7 +91,7 @@ source "$VENV"
 │   │   ├── unpack.py                     # HWPX → 디렉토리 (XML pretty-print)
 │   │   └── pack.py                       # 디렉토리 → HWPX
 │   ├── build_hwpx.py                     # 템플릿 + XML → .hwpx 조립 (핵심, 이미지/다중섹션 지원)
-│   ├── section_builder.py                # JSON → section0.xml 동적 생성 (28개 블록 타입)
+│   ├── section_builder.py                # JSON → section0.xml 동적 생성 (31개 블록 타입)
 │   ├── create_document.py                # JSON→HWPX 원커맨드 파이프라인 (단일/다중 섹션)
 │   ├── property_registry.py              # 동적 charPr/paraPr/borderFill 레지스트리
 │   ├── analyze_template.py               # HWPX 심층 분석 (레퍼런스 기반 생성용)
@@ -216,9 +216,9 @@ python3 "$SKILL_DIR/scripts/create_document.py" input.json --template gonmun -o 
 }
 ```
 
-### JSON 블록 타입 (전체 28개)
+### JSON 블록 타입 (전체 31개)
 
-#### 기본 타입 (12개) — 모든 템플릿에서 사용 가능
+#### 기본 타입 (15개) — 모든 템플릿에서 사용 가능
 
 | type | 필수 필드 | 설명 |
 |------|-----------|------|
@@ -234,6 +234,9 @@ python3 "$SKILL_DIR/scripts/create_document.py" input.json --template gonmun -o 
 | label_value | pairs | 라벨-값 2열 표 ([["라벨","값"], ...]) |
 | signature | lines | 서명 블록 (우측 정렬) |
 | pagebreak | — | 페이지 나누기 |
+| hyperlink | url | 하이퍼링크 (text, prefix, suffix 옵션) |
+| text_footnote | text, footnote | 본문 텍스트 + 각주 (페이지 하단) |
+| text_endnote | text, endnote | 본문 텍스트 + 미주 (문서 끝) |
 
 #### KCUP 전용 타입 (16개) — template=kcup에서 사용
 
@@ -318,6 +321,55 @@ borderFill dict 키: `bg`(#RRGGBB), `border`(all sides), `borderWidth`, `borderC
 ```
 
 각 섹션이 별도 section0.xml, section1.xml로 생성되고 content.hpf에 자동 등록.
+
+#### 머리말/꼬리말 (header/footer)
+
+JSON 최상위에 `"header"` / `"footer"` 키로 정의. 페이지 머리말·꼬리말을 자동 생성한다.
+
+```json
+{
+  "header": {
+    "text": "- {{page}} -",
+    "align": "center"
+  },
+  "footer": {
+    "text": "{{page}} / {{total_pages}}",
+    "align": "right"
+  },
+  "blocks": [...]
+}
+```
+
+- `text`: 표시 텍스트. `{{page}}`→현재 쪽 번호, `{{total_pages}}`→전체 쪽수 (autoNum 자동 변환)
+- `align`: `left`/`center`/`right` (기본 `left`)
+- `applyPageType`: `BOTH`/`EVEN`/`ODD` (기본 `BOTH`)
+- 다중 섹션에서는 각 섹션별 또는 전역 header/footer 모두 지원
+- XML 구조: `hp:ctrl > hp:header/footer > hp:subList > hp:p` (hp 네임스페이스)
+
+#### 하이퍼링크 (hyperlink) 블록
+
+```json
+{"type": "hyperlink", "url": "https://example.com", "text": "표시 텍스트", "prefix": "앞 텍스트: ", "suffix": " 참조"}
+```
+
+- `url`: 대상 URL (필수)
+- `text`: 링크 표시 텍스트 (생략 시 URL 그대로 표시)
+- `prefix`: 링크 앞에 붙는 일반 텍스트 (옵션)
+- `suffix`: 링크 뒤에 붙는 일반 텍스트 (옵션)
+- XML 구조: `hp:fieldBegin type="HYPERLINK"` + `hp:parameters` + display run + `hp:fieldEnd`
+
+#### 각주/미주 (footnote/endnote) 블록
+
+```json
+{"type": "text_footnote", "text": "본문 텍스트", "footnote": "각주 내용"}
+{"type": "text_endnote", "text": "본문 텍스트", "endnote": "미주 내용"}
+```
+
+- `text`: 본문에 표시되는 텍스트 (각주/미주 마커가 끝에 자동 부착)
+- `footnote`/`endnote`: 주석 내용
+- 번호 자동 증가 (문서 내 순차 매김)
+- 각주는 해당 페이지 하단, 미주는 문서 끝에 표시
+- XML 구조: `hp:ctrl > hp:footNote/endNote > hp:subList > hp:p` (autoNum FOOTNOTE/ENDNOTE)
 
 ---
 
