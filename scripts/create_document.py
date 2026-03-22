@@ -101,7 +101,22 @@ def main():
         if candidate.exists():
             base_section = candidate
 
-    # ── Step 1: section_builder.py ──
+    # 다중 섹션 감지
+    with open(json_path, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+    is_multi = "sections" in json_data
+
+    if is_multi:
+        _run_multi_section(json_path, output_path, template_name,
+                           base_section, args)
+    else:
+        _run_single_section(json_path, output_path, template_name,
+                            base_section, args)
+
+
+def _run_single_section(json_path, output_path, template_name,
+                         base_section, args):
+    """단일 섹션 파이프라인."""
     with tempfile.NamedTemporaryFile(
             suffix=".xml", prefix="section0_", delete=False) as tmp:
         section_tmp = Path(tmp.name)
@@ -118,8 +133,10 @@ def main():
 
     run_step(sb_cmd, "section_builder")
 
+    # 이미지 매니페스트 자동 탐색
+    images_json = section_tmp.parent / f"{section_tmp.stem}_images.json"
+
     try:
-        # ── Step 2: build_hwpx.py ──
         bh_cmd = [
             sys.executable, str(SCRIPT_DIR / "build_hwpx.py"),
             "--section", str(section_tmp),
@@ -131,19 +148,81 @@ def main():
             bh_cmd += ["--title", args.title]
         if args.creator:
             bh_cmd += ["--creator", args.creator]
+        if images_json.exists():
+            bh_cmd += ["--images-json", str(images_json)]
 
         run_step(bh_cmd, "build_hwpx")
 
-        # ── Step 3: validate.py ──
         if not args.no_validate:
             val_cmd = [
                 sys.executable, str(SCRIPT_DIR / "validate.py"),
                 str(output_path),
             ]
-            result = run_step(val_cmd, "validate")
+            run_step(val_cmd, "validate")
 
-        # 결과 출력
         print(f"✅ {output_path}", file=sys.stderr)
+        info = []
+        if args.style:
+            info.append(f"style={args.style}")
+        if template_name:
+            info.append(f"template={template_name}")
+        if images_json.exists():
+            info.append("images=yes")
+        if info:
+            print(f"   {' '.join(info)}", file=sys.stderr)
+
+    finally:
+        section_tmp.unlink(missing_ok=True)
+        if images_json.exists():
+            images_json.unlink(missing_ok=True)
+
+
+def _run_multi_section(json_path, output_path, template_name,
+                        base_section, args):
+    """다중 섹션 파이프라인."""
+    with tempfile.TemporaryDirectory(prefix="sections_") as sec_dir:
+        sec_dir = Path(sec_dir)
+
+        sb_cmd = [
+            sys.executable, str(SCRIPT_DIR / "section_builder.py"),
+            str(json_path),
+            "-o", str(sec_dir),
+        ]
+        if template_name:
+            sb_cmd += ["-t", template_name]
+        if base_section:
+            sb_cmd += ["--base-section", str(base_section)]
+
+        run_step(sb_cmd, "section_builder (multi)")
+
+        # 이미지 매니페스트 자동 탐색
+        images_json = sec_dir / "_images.json"
+
+        bh_cmd = [
+            sys.executable, str(SCRIPT_DIR / "build_hwpx.py"),
+            "--section-dir", str(sec_dir),
+            "--output", str(output_path),
+        ]
+        if template_name:
+            bh_cmd += ["--template", template_name]
+        if args.title:
+            bh_cmd += ["--title", args.title]
+        if args.creator:
+            bh_cmd += ["--creator", args.creator]
+        if images_json.exists():
+            bh_cmd += ["--images-json", str(images_json)]
+
+        run_step(bh_cmd, "build_hwpx (multi)")
+
+        if not args.no_validate:
+            val_cmd = [
+                sys.executable, str(SCRIPT_DIR / "validate.py"),
+                str(output_path),
+            ]
+            run_step(val_cmd, "validate")
+
+        sec_count = len(list(sec_dir.glob("section*.xml")))
+        print(f"✅ {output_path} ({sec_count} sections)", file=sys.stderr)
         info = []
         if args.style:
             info.append(f"style={args.style}")
@@ -151,9 +230,6 @@ def main():
             info.append(f"template={template_name}")
         if info:
             print(f"   {' '.join(info)}", file=sys.stderr)
-
-    finally:
-        section_tmp.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

@@ -1,12 +1,62 @@
 # HWPX Skill CHANGELOG
 
 ## 현재 상태
-- 버전: v1.2 (KCUP 스타일 + 원커맨드 파이프라인)
+- 버전: v1.3 (이미지 삽입 + 동적 서식 레지스트리 + 다중 섹션)
 - Git: https://github.com/Victor-jh/hwpxskill (forked from Canine89/hwpxskill)
 - Cowork 경로: ~/HWPX Skill Dev
-- 스크립트: build_hwpx.py, analyze_template.py, section_builder.py, create_document.py, diff_docs.py, validate.py, page_guard.py, text_extract.py, office/unpack.py, office/pack.py
+- 스크립트: build_hwpx.py, analyze_template.py, section_builder.py, create_document.py, property_registry.py, diff_docs.py, validate.py, page_guard.py, text_extract.py, office/unpack.py, office/pack.py
 - 템플릿: base, gonmun, report, minutes, proposal, **kcup**
-- JSON 타입: 11 기본 + 16 KCUP 전용 = 27개
+- JSON 타입: 12 기본 + 16 KCUP 전용 = 28개
+- 동적 서식: charPr/paraPr/borderFill을 JSON dict로 인라인 지정 가능
+
+## 2026-03-22 (Cowork 세션 #3) — 이미지 삽입 + 동적 서식 레지스트리 + 다중 섹션
+
+### 이미지 삽입 (section_builder.py + build_hwpx.py)
+- `image` 블록 타입 신규 추가 (기본 타입 11→12개)
+  - `src`: 이미지 파일 경로 (PNG/JPEG/GIF/BMP)
+  - `width`, `height`: mm 단위 크기 지정 (생략 시 원본 비율 자동 계산)
+  - `align`: 정렬 (`left`/`center`/`right`)
+- Pillow 없이 순수 Python으로 PNG/JPEG/GIF/BMP 헤더에서 해상도 추출
+- BinData 연동: 이미지 파일 → BinData/ 폴더 복사, content.hpf manifest 등록
+- 이미지 사이드카 JSON (`_images.json`) 자동 생성/전달
+- `hc:img` + `hp:shapeObject` + `hp:pic` + `hp:inMargin` XML 생성
+
+### PropertyRegistry — 동적 charPr/paraPr/borderFill 레지스트리 (property_registry.py 신규)
+- LLM JSON에서 `"charPr": {"bold": true, "size": 14, "color": "#FF0000"}` 형태로 인라인 서식 지정
+- 템플릿 header.xml의 기존 ID를 자동 탐색 → 충돌 없는 새 ID 동적 할당
+- 스펙 정규화 + 캐싱: 동일 스펙은 같은 ID 재사용 (중복 방지)
+- charPr 지원 속성: size, bold, italic, color, fontRef, spacing, underline, strikeout, shadeColor, height
+- paraPr 지원 속성: align, lineSpacing, lineSpacingType, margin (dict), indent, left, right, prev, next
+  - hp:switch/case/default 패턴 자동 생성 (한컴 호환)
+  - hc 네임스페이스 마진 요소 (intent/left/right/prev/next) 생성
+- borderFill 지원 속성: bg, border, borderWidth, borderColor, 개별 사이드 보더
+- `resolve_font(face)`: 새 폰트 자동 등록 (7개 언어 카테고리)
+- JSON 사이드카 직렬화 (`_registry.json`): section_builder → build_hwpx 파이프라인 연동
+- `apply(header_path)`: header.xml에 동적 엔트리 삽입, itemCnt 자동 업데이트
+- **한컴독스 렌더링 교차검증 완료** ✅
+
+### 다중 섹션 지원 (create_document.py + build_hwpx.py)
+- JSON `"sections"` 키로 다중 섹션 정의 가능
+- section_builder.py: `--output-dir` 모드로 section0.xml, section1.xml, ... 개별 생성
+- build_hwpx.py: `--section-dir` 모드로 다중 섹션 빌드
+- content.hpf manifest/spine 동적 등록 (`_register_sections_in_hpf()`)
+
+### 기타 개선
+- build_hwpx.py: `.DS_Store`, `Thumbs.db` 등 비문서 파일 자동 제외
+- section_builder.py: `hc` 네임스페이스 추가 (이미지/레지스트리 공용)
+- section_builder.py: 모든 블록 핸들러에 `_resolve_cp()`, `_resolve_pp()`, `_resolve_bf()` 통합
+
+### 검증 통과
+- 이미지 삽입 end-to-end (PNG 파일 → HWPX → 한컴독스 렌더링) ✅
+- 동적 charPr 5종 (빨강볼드14pt, 파란이탤릭12pt, 초록밑줄11pt, 혼합run 2종) ✅
+- 동적 paraPr 2종 (가운데정렬+줄간격200%, 왼쪽여백3000) ✅
+- 스펙 캐싱 (동일 스펙 → 동일 ID 재사용) ✅
+- 다중 섹션 빌드 구조 검증 ✅
+- **한컴독스 Web 에디터 렌더링 정상 확인** ✅
+
+### 산출물
+- property_registry.py — 700+ 라인, 동적 서식 레지스트리 핵심 모듈
+- 동적서식_검증.hwpx — 동적 서식 교차검증용 테스트 문서
 
 ## 2026-03-21 (Cowork 세션 #2) — KCUP 스타일 구현
 ### KCUP 블록 타입 추가 (section_builder.py)
@@ -77,7 +127,9 @@
 - [x] .gitignore 추가 ✅
 - [ ] 표 셀 병합 실무 문서 추가 검증
 - [ ] 다중 섹션 지원 (L2 돌파)
-- [ ] 이미지 삽입 (L3 돌파)
+- [x] 이미지 삽입 ✅ (image 블록 타입 + BinData 연동)
+- [x] 동적 서식 레지스트리 ✅ (PropertyRegistry, 한컴독스 교차검증 완료)
+- [x] 다중 섹션 지원 ✅ (sections JSON + section-dir 빌드)
 - [ ] StyleProfile 분리 (기존 템플릿으로 검증 후)
 - [ ] 플러그인 패키징
 

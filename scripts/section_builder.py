@@ -3,9 +3,10 @@
 
 COWORK_CONTEXT.md 섹션 6 스펙 기반 재작성 + KCUP 팀장 대응용 스펙 v1.1.
 
-지원 타입 (공통 11):
+지원 타입 (공통 12):
   text, empty, heading, bullet, numbered, indent, note,
   table (colRatios, 셀 병합, 다중 run, 셀 내 다중 문단),
+  image (인라인 이미지 삽입, BinData 연동),
   signature, label_value, pagebreak
 
 KCUP 전용 타입 (16):
@@ -17,14 +18,19 @@ KCUP 전용 타입 (16):
 
 import argparse
 import json
+import mimetypes
+import struct
 import sys
 from copy import deepcopy
 from pathlib import Path
 
 from lxml import etree
 
+from property_registry import PropertyRegistry
+
 HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
 HS = "http://www.hancom.co.kr/hwpml/2011/section"
+HC = "http://www.hancom.co.kr/hwpml/2011/core"
 NSMAP = {
     "hp": HP,
     "hs": HS,
@@ -120,6 +126,10 @@ def hs(tag):
     return f"{{{HS}}}{tag}"
 
 
+def hc(tag):
+    return f"{{{HC}}}{tag}"
+
+
 # ── 기본 요소 생성 ──────────────────────────────────────────────
 
 def make_run(charPrIDRef, text=None):
@@ -154,6 +164,288 @@ def make_paragraph(idgen, paraPr=0, charPr=0, text=None, runs=None,
 
 def make_empty(idgen, paraPr=0, charPr=0):
     return make_paragraph(idgen, paraPr=paraPr, charPr=charPr)
+
+
+# ── 이미지 유틸리티 ─────────────────────────────────────────────
+
+# 글로벌 이미지 레지스트리: section_builder 전체에서 수집, 나중에 사이드카 JSON 출력
+_IMAGE_REGISTRY = []  # [{"id": "image1", "src": "/abs/path", "media_type": "image/png"}]
+
+
+def _get_image_dimensions(file_path):
+    """PNG/JPEG/GIF/BMP 파일에서 (width_px, height_px) 추출. Pillow 불필요."""
+    p = Path(file_path)
+    if not p.exists():
+        return None, None
+    with open(p, "rb") as f:
+        header = f.read(32)
+    # PNG
+    if header[:8] == b"\x89PNG\r\n\x1a\n":
+        w, h = struct.unpack(">II", header[16:24])
+        return w, h
+    # JPEG
+    if header[:2] == b"\xff\xd8":
+        with open(p, "rb") as f:
+            f.read(2)
+            while True:
+                marker = f.read(2)
+                if len(marker) < 2:
+                    break
+                if marker[0] != 0xFF:
+                    break
+                if marker[1] in (0xC0, 0xC1, 0xC2):
+                    f.read(3)  # length + precision
+                    h, w = struct.unpack(">HH", f.read(4))
+                    return w, h
+                else:
+                    length = struct.unpack(">H", f.read(2))[0]
+                    f.read(length - 2)
+        return None, None
+    # GIF
+    if header[:4] in (b"GIF8",):
+        w, h = struct.unpack("<HH", header[6:10])
+        return w, h
+    # BMP
+    if header[:2] == b"BM":
+        w, h = struct.unpack("<ii", header[18:26])
+        return w, abs(h)
+    return None, None
+
+
+def _mm_to_hwpunit(mm):
+    """mm → HWPUNIT 변환 (1mm ≈ 283.46 HWPUNIT)."""
+    return int(mm * 283.46)
+
+
+def _px_to_hwpunit(px, dpi=96):
+    """pixel → HWPUNIT 변환 (1inch = 7200 HWPUNIT)."""
+    return int(px * 7200 / dpi)
+
+
+def _detect_media_type(file_path):
+    """파일 확장자로 MIME 타입 추정."""
+    mt, _ = mimetypes.guess_type(str(file_path))
+    return mt or "application/octet-stream"
+
+
+def make_image_paragraph(idgen, item, body_width=None):
+    """이미지 블록을 hp:p > hp:run > hp:pic XML로 변환.
+
+    JSON 스펙:
+        {
+            "type": "image",
+            "src": "/path/to/image.png",   (필수)
+            "width_mm": 100,               (선택, 미지정 시 본문폭에 맞춤)
+            "height_mm": 75,               (선택, 미지정 시 비율 자동계산)
+            "align": "center",             (선택: left/center/right, 기본 center)
+            "caption": "그림 설명"          (선택, 미구현 — 향후 확장)
+        }
+
+    Returns: (hp:p element, image_info dict)
+        image_info: {"id": "imageN", "src": abs_path, "media_type": "image/png"}
+    """
+    bw = body_width or BODY_WIDTH
+    src = item.get("src", "")
+    src_path = Path(src).resolve()
+    align = item.get("align", "center")
+
+    # 이미지 ID 할당
+    img_idx = len(_IMAGE_REGISTRY) + 1
+    img_id = f"image{img_idx}"
+
+    # 원본 크기 (px)
+    orig_w_px, orig_h_px = _get_image_dimensions(src)
+    if orig_w_px is None:
+        # 기본값: 300x200
+        orig_w_px, orig_h_px = 300, 200
+
+    # 원본 크기 HWPUNIT (imgDim용)
+    dim_w = _px_to_hwpunit(orig_w_px)
+    dim_h = _px_to_hwpunit(orig_h_px)
+
+    # 표시 크기 결정
+    if "width_mm" in item:
+        display_w = _mm_to_hwpunit(item["width_mm"])
+        if "height_mm" in item:
+            display_h = _mm_to_hwpunit(item["height_mm"])
+        else:
+            display_h = int(display_w * orig_h_px / orig_w_px) if orig_w_px else display_w
+    else:
+        # 본문폭에 맞춤 (비율 유지)
+        display_w = bw
+        display_h = int(bw * orig_h_px / orig_w_px) if orig_w_px else int(bw * 0.67)
+
+    # 본문폭 초과 방지
+    if display_w > bw:
+        ratio = bw / display_w
+        display_w = bw
+        display_h = int(display_h * ratio)
+
+    # 정렬에 따른 paraPr
+    align_paraPr_map = {"left": 0, "center": 20, "right": 0}  # 20=CENTER
+    pp = item.get("paraPr", align_paraPr_map.get(align, 20))
+
+    # ── XML 생성 (한컴 Docs 실제 출력 구조 기반) ──
+    p = etree.Element(hp("p"))
+    p.set("id", idgen.next())
+    p.set("paraPrIDRef", str(pp))
+    p.set("styleIDRef", "0")
+    p.set("pageBreak", "0")
+    p.set("columnBreak", "0")
+    p.set("merged", "0")
+
+    run = etree.SubElement(p, hp("run"))
+    run.set("charPrIDRef", str(item.get("charPr", 0)))
+
+    pic = etree.SubElement(run, hp("pic"))
+    pic_id = idgen.next()
+    instid = idgen.next()
+    pic.set("id", pic_id)
+    pic.set("zOrder", "0")
+    pic.set("numberingType", "PICTURE")
+    pic.set("textWrap", "TOP_AND_BOTTOM")
+    pic.set("textFlow", "BOTH_SIDES")
+    pic.set("lock", "0")
+    pic.set("dropcapstyle", "None")
+    pic.set("href", "")
+    pic.set("groupLevel", "0")
+    pic.set("instid", instid)
+    pic.set("reverse", "0")
+
+    # ─── 한컴 실제 출력 순서 (reverse-engineered) ─────────
+    # offset → orgSz → curSz → flip → rotationInfo → renderingInfo
+    # → hc:img → imgRect → imgClip → inMargin → imgDim → effects
+    # → sz → pos → outMargin
+
+    # 1. offset
+    offset = etree.SubElement(pic, hp("offset"))
+    offset.set("x", "0")
+    offset.set("y", "0")
+
+    # 2. orgSz (표시 크기)
+    orgSz = etree.SubElement(pic, hp("orgSz"))
+    orgSz.set("width", str(display_w))
+    orgSz.set("height", str(display_h))
+
+    # 3. curSz (0,0)
+    curSz = etree.SubElement(pic, hp("curSz"))
+    curSz.set("width", "0")
+    curSz.set("height", "0")
+
+    # 4. flip
+    flip = etree.SubElement(pic, hp("flip"))
+    flip.set("horizontal", "0")
+    flip.set("vertical", "0")
+
+    # 5. rotationInfo (centerX/centerY = 0)
+    rot = etree.SubElement(pic, hp("rotationInfo"))
+    rot.set("angle", "0")
+    rot.set("centerX", "0")
+    rot.set("centerY", "0")
+    rot.set("rotateimage", "1")
+
+    # 6. renderingInfo (단위 행렬, hc 네임스페이스)
+    ri = etree.SubElement(pic, hp("renderingInfo"))
+    for mtx_tag in ("transMatrix", "scaMatrix", "rotMatrix"):
+        mtx = etree.SubElement(ri, hc(mtx_tag))
+        mtx.set("e1", "1")
+        mtx.set("e2", "0")
+        mtx.set("e3", "0")
+        mtx.set("e4", "0")
+        mtx.set("e5", "1")
+        mtx.set("e6", "0")
+
+    # 7. hc:img (★ 핵심: hp:img가 아니라 hc:img 네임스페이스!)
+    img = etree.SubElement(pic, hc("img"))
+    img.set("binaryItemIDRef", img_id)
+    img.set("bright", "0")
+    img.set("contrast", "0")
+    img.set("effect", "REAL_PIC")
+    img.set("alpha", "0")
+
+    # 8. imgRect (표시 영역, hc 네임스페이스 pt)
+    imgRect = etree.SubElement(pic, hp("imgRect"))
+    for i, (px, py) in enumerate([(0, 0), (display_w, 0),
+                                   (display_w, display_h), (0, display_h)]):
+        pt = etree.SubElement(imgRect, hc(f"pt{i}"))
+        pt.set("x", str(px))
+        pt.set("y", str(py))
+
+    # 9. imgClip (display 크기 사용)
+    imgClip = etree.SubElement(pic, hp("imgClip"))
+    imgClip.set("left", "0")
+    imgClip.set("right", str(display_w))
+    imgClip.set("top", "0")
+    imgClip.set("bottom", str(display_h))
+
+    # 10. inMargin
+    inm = etree.SubElement(pic, hp("inMargin"))
+    inm.set("left", "0")
+    inm.set("right", "0")
+    inm.set("top", "0")
+    inm.set("bottom", "0")
+
+    # 11. imgDim (원본 pixel→HWPUNIT)
+    imgDim = etree.SubElement(pic, hp("imgDim"))
+    imgDim.set("dimwidth", str(dim_w))
+    imgDim.set("dimheight", str(dim_h))
+
+    # 12. effects (빈 요소)
+    etree.SubElement(pic, hp("effects"))
+
+    # 13. sz (실제 표시 크기)
+    sz = etree.SubElement(pic, hp("sz"))
+    sz.set("width", str(display_w))
+    sz.set("widthRelTo", "ABSOLUTE")
+    sz.set("height", str(display_h))
+    sz.set("heightRelTo", "ABSOLUTE")
+    sz.set("protect", "0")
+
+    # 14. pos — treatAsChar="1" (글자처럼 취급)
+    pos = etree.SubElement(pic, hp("pos"))
+    pos.set("treatAsChar", "1")
+    pos.set("affectLSpacing", "0")
+    pos.set("flowWithText", "1")
+    pos.set("allowOverlap", "0")
+    pos.set("holdAnchorAndSO", "0")
+    pos.set("vertRelTo", "PARA")
+    pos.set("horzRelTo", "PARA")
+    pos.set("vertAlign", "TOP")
+    pos.set("horzAlign", "LEFT")
+    pos.set("vertOffset", "0")
+    pos.set("horzOffset", "0")
+
+    # 15. outMargin
+    outm = etree.SubElement(pic, hp("outMargin"))
+    outm.set("left", "0")
+    outm.set("right", "0")
+    outm.set("top", "0")
+    outm.set("bottom", "0")
+
+    # ─── hp:pic 다음에 빈 hp:t (한컴 필수) ───
+    etree.SubElement(run, hp("t"))
+
+    # 이미지 레지스트리에 등록
+    media_type = _detect_media_type(src)
+    img_info = {
+        "id": img_id,
+        "src": str(src_path),
+        "media_type": media_type,
+        "filename": f"{img_id}{Path(src).suffix}" if src else f"{img_id}.png",
+    }
+    _IMAGE_REGISTRY.append(img_info)
+
+    return p, img_info
+
+
+def get_image_registry():
+    """현재까지 등록된 이미지 목록 반환."""
+    return list(_IMAGE_REGISTRY)
+
+
+def reset_image_registry():
+    """이미지 레지스트리 초기화 (테스트/재실행용)."""
+    _IMAGE_REGISTRY.clear()
 
 
 # ── 다중 run 지원 ───────────────────────────────────────────────
@@ -852,12 +1144,54 @@ def auto_spacing(content):
     return result
 
 
+# ── 인라인 스펙 해석 헬퍼 ──────────────────────────────────────
+
+def _resolve_cp(item, default, registry):
+    """item["charPr"]를 해석: int면 그대로, dict면 registry로 등록."""
+    val = item.get("charPr", default)
+    if registry and isinstance(val, dict):
+        return registry.resolve_charPr(val)
+    return val if isinstance(val, int) else default
+
+
+def _resolve_pp(item, default, registry):
+    """item["paraPr"]를 해석: int면 그대로, dict면 registry로 등록."""
+    val = item.get("paraPr", default)
+    if registry and isinstance(val, dict):
+        return registry.resolve_paraPr(val)
+    return val if isinstance(val, int) else default
+
+
+def _resolve_bf(item, key, default, registry):
+    """item[key] (borderFill 계열)를 해석."""
+    val = item.get(key, default)
+    if registry and isinstance(val, dict):
+        return str(registry.resolve_borderFill(val))
+    return str(val) if val is not None else str(default)
+
+
+def build_runs_with_registry(item, registry=None):
+    """item["runs"]에서 run 리스트 생성. 각 run의 charPr가 dict이면 registry로 등록."""
+    if "runs" not in item:
+        return None
+    runs = []
+    for r in item["runs"]:
+        cp = r.get("charPr", 0)
+        if registry and isinstance(cp, dict):
+            cp = registry.resolve_charPr(cp)
+        run = make_run(cp, r.get("text", ""))
+        runs.append(run)
+    return runs
+
+
 # ── 메인 빌더 ───────────────────────────────────────────────────
 
-def build_section(json_data, base_section_path=None, template=None):
+def build_section(json_data, base_section_path=None, template=None,
+                  registry=None):
     """JSON 정의에서 section0.xml의 hs:sec 요소를 생성.
 
     template: 템플릿 이름 (kcup, report 등). body_width 결정에 사용.
+    registry: PropertyRegistry 인스턴스. 인라인 charPr/paraPr dict 해석에 사용.
     """
     idgen = IDGen()
     body_width = BODY_WIDTH_MAP.get(template, BODY_WIDTH) if template else BODY_WIDTH
@@ -869,7 +1203,9 @@ def build_section(json_data, base_section_path=None, template=None):
     sec.append(secpr_p)
 
     # 콘텐츠 항목 처리
-    content = json_data.get("content", [])
+    content = json_data.get("blocks", [])
+    if not content:
+        content = json_data.get("content", [])
     if not content:
         content = json_data.get("items", [])
 
@@ -881,20 +1217,22 @@ def build_section(json_data, base_section_path=None, template=None):
         item_type = item.get("type", "text")
 
         if item_type == "empty":
-            sec.append(make_empty(idgen))
+            cp = _resolve_cp(item, 0, registry)
+            pp = _resolve_pp(item, 0, registry)
+            sec.append(make_empty(idgen, paraPr=pp, charPr=cp))
 
         elif item_type == "text":
-            runs = build_runs(item)
-            cp = item.get("charPr", 0)
-            pp = item.get("paraPr", 0)
+            runs = build_runs_with_registry(item, registry)
+            cp = _resolve_cp(item, 0, registry)
+            pp = _resolve_pp(item, 0, registry)
             sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
                                        text=item.get("text"), runs=runs))
 
         elif item_type == "heading":
             level = item.get("level", 1)
             style = HEADING_STYLES.get(level, HEADING_STYLES[1])
-            cp = item.get("charPr", style["charPr"])
-            pp = item.get("paraPr", style["paraPr"])
+            cp = _resolve_cp(item, style["charPr"], registry)
+            pp = _resolve_pp(item, style["paraPr"], registry)
             sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
                                        text=item.get("text", "")))
 
@@ -902,9 +1240,9 @@ def build_section(json_data, base_section_path=None, template=None):
             label = item.get("label", "•")
             text = item.get("text", "")
             full_text = f"{label} {text}"
-            pp = item.get("paraPr", 24)
-            cp = item.get("charPr", 0)
-            runs = build_runs(item)
+            pp = _resolve_pp(item, 24, registry)
+            cp = _resolve_cp(item, 0, registry)
+            runs = build_runs_with_registry(item, registry)
             if not runs:
                 sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
                                            text=full_text))
@@ -929,9 +1267,9 @@ def build_section(json_data, base_section_path=None, template=None):
 
             full_text = f"{prefix} {text}"
             ns = NUMBERED_STYLES.get(style, NUMBERED_STYLES["circle"])
-            pp = item.get("paraPr", ns["paraPr"])
-            cp = item.get("charPr", ns["charPr"])
-            runs = build_runs(item)
+            pp = _resolve_pp(item, ns["paraPr"], registry)
+            cp = _resolve_cp(item, ns["charPr"], registry)
+            runs = build_runs_with_registry(item, registry)
             if not runs:
                 sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
                                            text=full_text))
@@ -942,16 +1280,16 @@ def build_section(json_data, base_section_path=None, template=None):
             label = item.get("label", "")
             text = item.get("text", "")
             full_text = f"{label}: {text}" if label else text
-            pp = item.get("paraPr", 25)
-            cp = item.get("charPr", 0)
+            pp = _resolve_pp(item, 25, registry)
+            cp = _resolve_cp(item, 0, registry)
             sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
                                        text=full_text))
 
         elif item_type == "note":
             text = item.get("text", "")
             full_text = f"※ {text}"
-            pp = item.get("paraPr", 0)
-            cp = item.get("charPr", 11)
+            pp = _resolve_pp(item, 0, registry)
+            cp = _resolve_cp(item, 11, registry)
             sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
                                        text=full_text))
 
@@ -967,6 +1305,11 @@ def build_section(json_data, base_section_path=None, template=None):
 
         elif item_type == "pagebreak":
             sec.append(make_paragraph(idgen, pageBreak="1"))
+
+        elif item_type == "image":
+            img_p, _img_info = make_image_paragraph(idgen, item,
+                                                     body_width=body_width)
+            sec.append(img_p)
 
         # ── KCUP 전용 타입 ────────────────────────────────
         elif item_type == "kcup_box":
@@ -1022,10 +1365,280 @@ def build_section(json_data, base_section_path=None, template=None):
     return sec
 
 
-def build_xml(json_data, base_section_path=None, template=None):
-    sec = build_section(json_data, base_section_path, template=template)
+def build_xml(json_data, base_section_path=None, template=None, registry=None):
+    sec = build_section(json_data, base_section_path, template=template,
+                        registry=registry)
     tree = etree.ElementTree(sec)
     return tree
+
+
+# ── 다중 섹션 (L2) ──────────────────────────────────────────────
+
+def _make_custom_secpr(idgen, base_section_path, sec_opts):
+    """secPr를 base에서 복사한 뒤 sec_opts로 오버라이드.
+
+    sec_opts 지원 키:
+      landscape: bool   — 용지 방향 (true=가로)
+      margin: dict      — {"left":mm, "right":mm, "top":mm, "bottom":mm,
+                           "header":mm, "footer":mm}
+      width: int        — 용지 폭 (HWPUNIT), 기본 A4
+      height: int       — 용지 높이 (HWPUNIT), 기본 A4
+    """
+    p = make_secpr_paragraph(idgen, base_section_path)
+
+    secpr = p.find(f".//{{{HP}}}secPr")
+    if secpr is None:
+        return p
+
+    pagePr = secpr.find(f"{{{HP}}}pagePr")
+    if pagePr is None:
+        return p
+
+    # landscape: NARROWLY=가로, WIDELY=세로
+    # width/height는 용지 물리 크기(A4)를 유지 — landscape 속성만 변경
+    if sec_opts.get("landscape"):
+        pagePr.set("landscape", "NARROWLY")
+    elif sec_opts.get("landscape") is False:
+        pagePr.set("landscape", "WIDELY")
+
+    # 직접 width/height 지정
+    if "width" in sec_opts:
+        pagePr.set("width", str(sec_opts["width"]))
+    if "height" in sec_opts:
+        pagePr.set("height", str(sec_opts["height"]))
+
+    # margin 오버라이드
+    margin_opts = sec_opts.get("margin", {})
+    if margin_opts:
+        mg = pagePr.find(f"{{{HP}}}margin")
+        if mg is None:
+            mg = etree.SubElement(pagePr, hp("margin"))
+        MM = 283  # 1mm ≈ 283 HWPUNIT (283.5 반올림)
+        for key in ("left", "right", "top", "bottom", "header", "footer", "gutter"):
+            if key in margin_opts:
+                mg.set(key, str(int(margin_opts[key] * MM)))
+
+    return p
+
+
+def build_multi_sections(json_data, base_section_path=None, template=None):
+    """JSON의 "sections" 배열에서 복수 section XML을 생성.
+
+    Returns:
+        list of (filename, etree.ElementTree) — [("section0.xml", tree), ...]
+    """
+    sections_def = json_data.get("sections", [])
+    if not sections_def:
+        # 단일 섹션 폴백
+        tree = build_xml(json_data, base_section_path, template=template)
+        return [("section0.xml", tree)]
+
+    results = []
+    for i, sec_def in enumerate(sections_def):
+        idgen = IDGen()
+        body_width = BODY_WIDTH_MAP.get(template, BODY_WIDTH) if template else BODY_WIDTH
+
+        sec = etree.Element(hs("sec"), nsmap=NSMAP)
+
+        # secPr (오버라이드 적용)
+        secpr_p = _make_custom_secpr(idgen, base_section_path, sec_def)
+        sec.append(secpr_p)
+
+        # 콘텐츠
+        content = sec_def.get("blocks", [])
+        if not content:
+            content = sec_def.get("content", [])
+
+        if sec_def.get("auto_spacing", json_data.get("auto_spacing", True)):
+            content = auto_spacing(content)
+
+        for item in content:
+            elements = _build_item(idgen, item, body_width, template)
+            for el in elements:
+                sec.append(el)
+
+        tree = etree.ElementTree(sec)
+        results.append((f"section{i}.xml", tree))
+
+    return results
+
+
+def _build_item(idgen, item, body_width, template):
+    """단일 블록 아이템을 파싱해서 요소 리스트를 반환.
+    build_section의 dispatch 로직을 재사용 가능한 함수로 분리."""
+    item_type = item.get("type", "text")
+    elements = []
+
+    if item_type == "empty":
+        elements.append(make_empty(idgen))
+
+    elif item_type == "text":
+        runs = build_runs(item)
+        cp = item.get("charPr", 0)
+        pp = item.get("paraPr", 0)
+        elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
+                                        text=item.get("text"), runs=runs))
+
+    elif item_type == "heading":
+        level = item.get("level", 1)
+        style = HEADING_STYLES.get(level, HEADING_STYLES[1])
+        cp = item.get("charPr", style["charPr"])
+        pp = item.get("paraPr", style["paraPr"])
+        elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
+                                        text=item.get("text", "")))
+
+    elif item_type == "bullet":
+        label = item.get("label", "•")
+        text = item.get("text", "")
+        full_text = f"{label} {text}"
+        pp = item.get("paraPr", 24)
+        cp = item.get("charPr", 0)
+        runs = build_runs(item)
+        if not runs:
+            elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
+                                            text=full_text))
+        else:
+            elements.append(make_paragraph(idgen, paraPr=pp, runs=runs))
+
+    elif item_type == "numbered":
+        num = item.get("num", 1)
+        style = item.get("style", "circle")
+        text = item.get("text", "")
+        if style == "roman":
+            prefix = ROMAN[num - 1] if num <= len(ROMAN) else f"{num}."
+        elif style == "circle":
+            prefix = CIRCLE_NUMS[num - 1] if num <= len(CIRCLE_NUMS) else f"({num})"
+        elif style == "dot":
+            prefix = f"{num}."
+        elif style == "kcup":
+            prefix = f"□ {num}."
+        else:
+            prefix = f"{num}."
+        full_text = f"{prefix} {text}"
+        ns = NUMBERED_STYLES.get(style, NUMBERED_STYLES["circle"])
+        pp = item.get("paraPr", ns["paraPr"])
+        cp = item.get("charPr", ns["charPr"])
+        runs = build_runs(item)
+        if not runs:
+            elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
+                                            text=full_text))
+        else:
+            elements.append(make_paragraph(idgen, paraPr=pp, runs=runs))
+
+    elif item_type == "indent":
+        label = item.get("label", "")
+        text = item.get("text", "")
+        full_text = f"{label}: {text}" if label else text
+        pp = item.get("paraPr", 25)
+        cp = item.get("charPr", 0)
+        elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
+                                        text=full_text))
+
+    elif item_type == "note":
+        text = item.get("text", "")
+        full_text = f"※ {text}"
+        pp = item.get("paraPr", 0)
+        cp = item.get("charPr", 11)
+        elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
+                                        text=full_text))
+
+    elif item_type == "table":
+        elements.append(make_table(idgen, item, body_width=body_width))
+
+    elif item_type == "label_value":
+        elements.append(make_label_value(idgen, item, body_width=body_width))
+
+    elif item_type == "signature":
+        for p in make_signature(idgen, item):
+            elements.append(p)
+
+    elif item_type == "pagebreak":
+        elements.append(make_paragraph(idgen, pageBreak="1"))
+
+    elif item_type == "image":
+        img_p, _img_info = make_image_paragraph(idgen, item,
+                                                  body_width=body_width)
+        elements.append(img_p)
+
+    # ── KCUP 전용 타입 ────────────────────────────────
+    elif item_type == "kcup_box":
+        elements.append(make_kcup_box(idgen, item))
+    elif item_type == "kcup_box_spacing":
+        elements.append(make_kcup_box_spacing(idgen, item))
+    elif item_type == "kcup_o":
+        elements.append(make_kcup_o(idgen, item))
+    elif item_type == "kcup_o_plain":
+        elements.append(make_kcup_o_plain(idgen, item))
+    elif item_type == "kcup_o_heading":
+        elements.append(make_kcup_o_heading(idgen, item))
+    elif item_type == "kcup_o_spacing":
+        elements.append(make_kcup_o_spacing(idgen, item))
+    elif item_type == "kcup_o_heading_spacing":
+        elements.append(make_kcup_o_heading_spacing(idgen, item))
+    elif item_type == "kcup_dash":
+        elements.append(make_kcup_dash(idgen, item))
+    elif item_type == "kcup_dash_plain":
+        elements.append(make_kcup_dash_plain(idgen, item))
+    elif item_type == "kcup_dash_spacing":
+        elements.append(make_kcup_dash_spacing(idgen, item))
+    elif item_type == "kcup_numbered":
+        elements.append(make_kcup_numbered(idgen, item))
+    elif item_type == "kcup_note":
+        elements.append(make_kcup_note(idgen, item))
+    elif item_type == "kcup_attachment":
+        elements.append(make_kcup_attachment(idgen, item))
+    elif item_type == "kcup_pointer":
+        elements.append(make_kcup_pointer(idgen, item))
+    elif item_type == "kcup_mixed_run":
+        elements.append(make_kcup_mixed_run(idgen, item))
+
+    return elements
+
+
+def _write_images_sidecar(output_path):
+    """이미지 레지스트리를 _images.json 사이드카 파일로 출력."""
+    images = get_image_registry()
+    if not images:
+        return None
+    out = Path(output_path)
+    if out.is_dir():
+        sidecar = out / "_images.json"
+    else:
+        sidecar = out.parent / f"{out.stem}_images.json"
+    with open(sidecar, "w", encoding="utf-8") as f:
+        json.dump(images, f, ensure_ascii=False, indent=2)
+    print(f"Images manifest: {sidecar} ({len(images)} images)",
+          file=sys.stderr)
+    return str(sidecar)
+
+
+def _resolve_header_for_registry(template=None):
+    """템플릿 이름에서 header.xml 경로를 찾아 registry 초기화용으로 반환."""
+    SKILL_DIR = Path(__file__).resolve().parent.parent
+    TEMPLATES_DIR = SKILL_DIR / "templates"
+
+    if template:
+        candidate = TEMPLATES_DIR / template / "header.xml"
+        if candidate.exists():
+            return str(candidate)
+    base_header = TEMPLATES_DIR / "base" / "Contents" / "header.xml"
+    if base_header.exists():
+        return str(base_header)
+    return None
+
+
+def _write_registry_sidecar(output_path, registry):
+    """레지스트리를 사이드카 JSON으로 저장."""
+    if not registry or not registry.has_changes():
+        return
+    if isinstance(output_path, str):
+        output_path = Path(output_path)
+    if output_path.is_dir():
+        sidecar = output_path / "_registry.json"
+    else:
+        sidecar = output_path.parent / f"{output_path.stem}_registry.json"
+    registry.save(str(sidecar))
+    print(f"  Registry sidecar: {sidecar}", file=sys.stderr)
 
 
 def main():
@@ -1033,24 +1646,45 @@ def main():
         description="JSON → section0.xml 동적 생성")
     parser.add_argument("json_file", help="JSON 정의 파일 경로")
     parser.add_argument("--output", "-o", default="/dev/stdout",
-                        help="출력 section0.xml 경로")
+                        help="출력 경로 (단일 섹션: 파일, 다중 섹션: 디렉토리)")
     parser.add_argument("--base-section",
                         help="secPr 복사용 base section0.xml 경로")
     parser.add_argument("--template", "-t",
                         help="템플릿 이름 (kcup, report 등). body_width 결정")
     args = parser.parse_args()
 
+    reset_image_registry()
+
     with open(args.json_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     base = Path(args.base_section) if args.base_section else None
-    tree = build_xml(data, base, template=args.template)
 
-    tree.write(args.output, xml_declaration=True, encoding="UTF-8",
-               pretty_print=True)
+    # 동적 서식 레지스트리 초기화
+    header_path = _resolve_header_for_registry(args.template)
+    registry = PropertyRegistry(header_path) if header_path else PropertyRegistry()
 
-    if args.output != "/dev/stdout":
-        print(f"Generated: {args.output}", file=sys.stderr)
+    # 다중 섹션 감지
+    if "sections" in data:
+        results = build_multi_sections(data, base, template=args.template)
+        out_dir = Path(args.output)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for fname, tree in results:
+            fpath = out_dir / fname
+            tree.write(str(fpath), xml_declaration=True, encoding="UTF-8",
+                       pretty_print=True)
+        print(f"Generated {len(results)} sections in {out_dir}",
+              file=sys.stderr)
+        _write_images_sidecar(out_dir)
+        _write_registry_sidecar(out_dir, registry)
+    else:
+        tree = build_xml(data, base, template=args.template, registry=registry)
+        tree.write(args.output, xml_declaration=True, encoding="UTF-8",
+                   pretty_print=True)
+        if args.output != "/dev/stdout":
+            print(f"Generated: {args.output}", file=sys.stderr)
+            _write_images_sidecar(args.output)
+            _write_registry_sidecar(args.output, registry)
 
 
 if __name__ == "__main__":

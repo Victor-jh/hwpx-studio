@@ -90,9 +90,10 @@ source "$VENV"
 │   ├── office/
 │   │   ├── unpack.py                     # HWPX → 디렉토리 (XML pretty-print)
 │   │   └── pack.py                       # 디렉토리 → HWPX
-│   ├── build_hwpx.py                     # 템플릿 + XML → .hwpx 조립 (핵심)
-│   ├── section_builder.py                # JSON → section0.xml 동적 생성 (27개 블록 타입)
-│   ├── create_document.py                # JSON→HWPX 원커맨드 파이프라인
+│   ├── build_hwpx.py                     # 템플릿 + XML → .hwpx 조립 (핵심, 이미지/다중섹션 지원)
+│   ├── section_builder.py                # JSON → section0.xml 동적 생성 (28개 블록 타입)
+│   ├── create_document.py                # JSON→HWPX 원커맨드 파이프라인 (단일/다중 섹션)
+│   ├── property_registry.py              # 동적 charPr/paraPr/borderFill 레지스트리
 │   ├── analyze_template.py               # HWPX 심층 분석 (레퍼런스 기반 생성용)
 │   ├── validate.py                       # HWPX 구조 검증
 │   ├── page_guard.py                     # 레퍼런스 대비 페이지 드리프트 위험 검사
@@ -215,9 +216,9 @@ python3 "$SKILL_DIR/scripts/create_document.py" input.json --template gonmun -o 
 }
 ```
 
-### JSON 블록 타입 (전체 27개)
+### JSON 블록 타입 (전체 28개)
 
-#### 기본 타입 (11개) — 모든 템플릿에서 사용 가능
+#### 기본 타입 (12개) — 모든 템플릿에서 사용 가능
 
 | type | 필수 필드 | 설명 |
 |------|-----------|------|
@@ -229,6 +230,7 @@ python3 "$SKILL_DIR/scripts/create_document.py" input.json --template gonmun -o 
 | indent | text, level(1-3) | 들여쓰기 문단 |
 | note | text | ※ 주석 문단 |
 | table | rows | 표 (colRatios, headerRows, charPr, paraPr, colSpan/rowSpan 옵션) |
+| image | src | 인라인 이미지 (width/height mm옵션, align옵션) |
 | label_value | pairs | 라벨-값 2열 표 ([["라벨","값"], ...]) |
 | signature | lines | 서명 블록 (우측 정렬) |
 | pagebreak | — | 페이지 나누기 |
@@ -266,6 +268,56 @@ python3 "$SKILL_DIR/scripts/create_document.py" input.json --template gonmun -o 
 | note/signature | — | passthrough (간격 삽입 안 함) |
 
 auto_spacing을 사용하면 수동 spacing 타입을 JSON에 넣지 않아도 됨 (53% JSON 감소 효과).
+
+#### 동적 서식 (PropertyRegistry) — charPr/paraPr를 JSON dict로 인라인 지정
+
+정적 ID 대신 dict 스펙을 넣으면 PropertyRegistry가 자동으로 header.xml에 새 엔트리를 할당한다.
+동일 스펙은 같은 ID로 캐싱되어 중복 생성 없음.
+
+```json
+{
+  "blocks": [
+    {"type": "text", "text": "빨간 볼드 14pt",
+     "charPr": {"bold": true, "size": 14, "color": "#FF0000"}},
+    {"type": "text", "text": "가운데 정렬 + 줄간격 200%",
+     "paraPr": {"align": "CENTER", "lineSpacing": 200}},
+    {"type": "text", "text": "혼합 서식",
+     "runs": [
+       {"text": "일반 ", "charPr": 0},
+       {"text": "빨간볼드", "charPr": {"bold": true, "color": "#FF0000"}},
+       {"text": " 파란이탤릭", "charPr": {"italic": true, "color": "#0000FF"}}
+     ]}
+  ]
+}
+```
+
+charPr dict 키: `size`(pt), `bold`, `italic`, `color`(#RRGGBB), `fontRef`, `spacing`, `underline`, `strikeout`, `shadeColor`, `height`(HWPUNIT)
+paraPr dict 키: `align`(JUSTIFY/LEFT/CENTER/RIGHT), `lineSpacing`, `lineSpacingType`, `margin`(dict), `indent`, `left`, `right`, `prev`, `next`
+borderFill dict 키: `bg`(#RRGGBB), `border`(all sides), `borderWidth`, `borderColor`
+
+#### image 블록 사용법
+
+```json
+{"type": "image", "src": "/path/to/photo.png", "width": 80, "height": 60, "align": "center"}
+```
+
+- `src`: 이미지 절대 경로 (PNG/JPEG/GIF/BMP)
+- `width`/`height`: mm 단위 (생략 시 원본 비율로 본문 폭에 맞춤)
+- `align`: `left`(기본)/`center`/`right`
+- BinData/ 복사 및 content.hpf manifest 등록 자동 처리
+
+#### 다중 섹션
+
+```json
+{
+  "sections": [
+    {"blocks": [{"type": "heading", "text": "1장", "level": 1}]},
+    {"blocks": [{"type": "heading", "text": "2장", "level": 1}]}
+  ]
+}
+```
+
+각 섹션이 별도 section0.xml, section1.xml로 생성되고 content.hpf에 자동 등록.
 
 ---
 
