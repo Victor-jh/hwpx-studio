@@ -91,6 +91,71 @@ _KCUP_PP_REV = {v: k for k, v in KCUP_PP.items()}
 _KCUP_CP_REV = {v: k for k, v in KCUP_CP.items()}
 
 
+# ── KCUP 표지 후처리 ─────────────────────────────────────────────
+
+def _postprocess_kcup_cover(blocks: list[dict]) -> list[dict]:
+    """블록 리스트에서 KCUP 표지 패턴을 감지하여 kcup_cover 블록으로 합침.
+
+    패턴: empty(charPr=19) × N + text(charPr=15, 제목) + empty × N
+          + text(charPr=16, 날짜) + [empty + text(charPr=16, 작성자)]
+          + empty(charPr=19) × N
+    → {"type": "kcup_cover", "title": ..., "date": ..., "author": ...}
+    """
+    if not blocks:
+        return blocks
+
+    # charPr=15 (cover_title) 블록 찾기
+    title_idx = None
+    for i, b in enumerate(blocks):
+        if b.get("type") == "text" and b.get("charPr") == KCUP_CP["cover_title"]:
+            title_idx = i
+            break
+
+    if title_idx is None:
+        return blocks
+
+    title_text = blocks[title_idx].get("text", "")
+
+    # 제목 앞의 empty 블록들 (charPr=19 또는 기본)
+    start = title_idx
+    while start > 0 and blocks[start - 1].get("type") == "empty":
+        start -= 1
+
+    # 제목 뒤에서 날짜/작성자 탐색
+    end = title_idx + 1
+    date_text = ""
+    author_text = ""
+
+    # empty들 건너뛰고 다음 text(날짜) 찾기
+    while end < len(blocks) and blocks[end].get("type") == "empty":
+        end += 1
+    if end < len(blocks) and blocks[end].get("type") == "text":
+        date_text = blocks[end].get("text", "")
+        end += 1
+        # empty들 건너뛰고 다음 text(작성자) 찾기
+        while end < len(blocks) and blocks[end].get("type") == "empty":
+            end += 1
+        if end < len(blocks) and blocks[end].get("type") == "text":
+            candidate = blocks[end].get("text", "")
+            # 작성자 여부: KCUP 본문 패턴이 아닌 짧은 텍스트
+            if len(candidate) < 30 and not candidate.startswith("□"):
+                author_text = candidate
+                end += 1
+
+    # 뒤쪽 empty들도 포함
+    while end < len(blocks) and blocks[end].get("type") == "empty":
+        end += 1
+
+    # kcup_box가 바로 뒤에 나오면 표지 영역 끝
+    cover_block: dict = {"type": "kcup_cover", "title": title_text}
+    if date_text:
+        cover_block["date"] = date_text
+    if author_text:
+        cover_block["author"] = author_text
+
+    return [cover_block] + blocks[end:]
+
+
 # ── 스타일 레지스트리 (header.xml 파싱) ──────────────────────────
 
 class StyleRegistry:
@@ -1134,7 +1199,7 @@ class HWPXReader:
                                              paraPr, charPr)
             blocks.append(block)
 
-        result["blocks"] = blocks
+        result["blocks"] = _postprocess_kcup_cover(blocks)
 
         if header_footer_info:
             result.update(header_footer_info)

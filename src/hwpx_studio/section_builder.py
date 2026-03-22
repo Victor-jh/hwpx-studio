@@ -2338,6 +2338,10 @@ def build_section(json_data, base_section_path=None, template=None,
             sec.append(make_field_paragraph(idgen, item, registry=registry))
 
         # ── KCUP 전용 타입 ────────────────────────────────
+        elif item_type == "kcup_cover":
+            for el in make_kcup_cover(idgen, item):
+                sec.append(el)
+
         elif item_type == "kcup_box":
             sec.append(make_kcup_box(idgen, item))
 
