@@ -47,15 +47,29 @@ hwpx-diff = "hwpx_studio.diff_docs:main"
 hwpx-guard = "hwpx_studio.page_guard:main"
 hwpx-pack = "hwpx_studio.office.pack:main"
 hwpx-unpack = "hwpx_studio.office.unpack:main"
+hwpx-mcp = "hwpx_studio.mcp_server:main"
 
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
+mcp = ["mcp>=1.0"]
+all = ["pytest>=7.0", "mcp>=1.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 hwpx_studio = ["templates/**/*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]  # line-too-long은 120 이하만 적용
+
+[tool.ruff.lint.isort]
+known-third-party = ["lxml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

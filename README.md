@@ -1,159 +1,103 @@
 # hwpx-studio
 
-한컴오피스 HWPX 문서를 AI 코딩 에이전트에서 **생성 · 읽기 · 편집**할 수 있게 해주는 스킬입니다.
+한컴오피스 HWPX 문서를 **생성 · 읽기 · 편집**하는 Python 라이브러리 + MCP 서버.
 
-python-hwpx API를 쓰면 버그가 많아서, XML을 직접 건드리는 방식을 택했습니다. 덕분에 기존 문서의 서식이나 구조를 거의 그대로 유지하면서 내용만 갈아끼울 수 있습니다.
+OWPML(KS X 6101) 표준 XML을 lxml + zipfile로 직접 조작합니다. 서드파티 HWP 라이브러리 의존 없이 charPr/paraPr 단위의 정밀한 서식 제어가 가능합니다.
 
-## 뭘 할 수 있나
+## 주요 기능
 
-**생성**: JSON으로 블록을 정의하면 HWPX 문서가 나옵니다. 35개 블록 타입, 6개 템플릿(공문·보고서·회의록·제안서·KCUP 등) 지원. 동적 서식(PropertyRegistry)으로 charPr/paraPr를 JSON dict로 인라인 지정할 수도 있습니다.
+**생성**: JSON DSL로 블록을 정의하면 HWPX 문서가 나옵니다. 35개 블록 타입, 6개 템플릿(공문·보고서·회의록·제안서·KCUP 등), 동적 서식(PropertyRegistry)으로 인라인 스타일 지정.
 
-**읽기**: HWPX 파일을 넣으면 section_builder 호환 JSON으로 역변환합니다. 35개 블록 타입 자동 감지, 머리말/꼬리말, 스타일 추출. 라운드트립(HWPX → JSON → HWPX → JSON) 100% 일치.
+**읽기**: HWPX → JSON 역변환. 35개 블록 타입 자동 감지, 머리말/꼬리말, 스타일 추출. 라운드트립(HWPX → JSON → HWPX) 블록 수/타입 100% 보존.
 
-**편집**: 기존 HWPX의 ZIP 내부 XML을 직접 수정합니다. 텍스트 찾아 바꾸기(정규식 지원), 블록 삽입/삭제/수정, 머리말·꼬리말 변경. 서식·이미지·표 구조 등 원본이 완벽하게 보존됩니다.
+**편집**: ZIP 내부 XML 직접 수정. 텍스트 찾아 바꾸기(정규식), 블록 삽입/삭제, 머리말·꼬리말 변경. 원본 서식·이미지·표 구조 완벽 보존.
 
-원본 HWPX를 첨부하면 스타일, 표 구조, 셀 병합, 여백까지 분석해서 구조를 보존한 채 내용만 바꿔줍니다. `page_guard.py`가 원본 대비 페이지 수 변동을 자동 감지합니다.
-
-OWPML 표준 XML을 직접 다루기 때문에 charPr, paraPr 단위로 서식을 제어할 수 있습니다. Claude Code, Cursor, Codex CLI에서 모두 동작합니다.
+**MCP 서버**: Claude Desktop, Claude Code 등 LLM 도구에서 5개 tool(create, read, edit, validate, extract_text)로 직접 호출.
 
 ## 설치
 
-Agent Skills 표준을 따르고 있어서, 어떤 도구든 스킬 디렉토리에 넣기만 하면 됩니다.
-
 ```bash
+# PyPI (라이브러리 + CLI)
+pip install hwpx-studio
+
+# MCP 서버 포함
+pip install hwpx-studio[mcp]
+
+# 개발 (테스트 포함)
+pip install hwpx-studio[all]
+
+# 소스에서
 git clone https://github.com/Victor-jh/hwpx-studio.git
+cd hwpx-studio
+pip install -e ".[all]"
 ```
-
-### Claude Code
-
-```bash
-# 이 프로젝트에서만 쓸 때
-cp -r hwpx-studio .claude/skills/hwpx-studio
-
-# 어디서든 쓸 때
-cp -r hwpx-studio ~/.claude/skills/hwpx-studio
-```
-
-넣어두면 HWPX 관련 작업할 때 알아서 불러옵니다.
-
-### Cursor
-
-```bash
-# 이 프로젝트에서만 쓸 때
-cp -r hwpx-studio .cursor/skills/hwpx-studio
-
-# 어디서든 쓸 때
-cp -r hwpx-studio ~/.cursor/skills/hwpx-studio
-```
-
-`.hwpx` 파일을 열 때 자동으로 활성화되게 하려면 rule 파일을 하나 추가하면 됩니다.
-
-```yaml
-# .cursor/rules/hwpx.mdc
----
-description: "HWPX 문서 작업 시 hwpx-studio 사용"
-globs: ["*.hwpx"]
----
-```
-
-### Codex CLI
-
-```bash
-# 이 프로젝트에서만 쓸 때
-cp -r hwpx-studio .agents/skills/hwpx-studio
-
-# 어디서든 쓸 때
-cp -r hwpx-studio ~/.agents/skills/hwpx-studio
-```
-
-Codex 세션 안에서 `$skill-installer`로 설치할 수도 있습니다.
 
 ## 빠른 시작
 
-### 1. 새 문서 만들기
-
-템플릿 골라서 바로 생성. 원본 파일 없을 때 씁니다.
+### CLI
 
 ```bash
-python3 scripts/build_hwpx.py --template gonmun --output result.hwpx
+# 새 문서 생성
+hwpx-create input.json -s report -o output.hwpx
+
+# 문서 읽기 (HWPX → JSON)
+hwpx-read document.hwpx --pretty -o output.json
+
+# 문서 편집
+hwpx-edit doc.hwpx --replace "원본" "수정" -o edited.hwpx
+
+# 구조 검증
+hwpx-validate output.hwpx
 ```
 
-JSON 기반 원커맨드 생성도 됩니다:
+### Python API
 
-```bash
-python3 scripts/create_document.py input.json -o result.hwpx --template report
+```python
+from hwpx_studio.read_document import HWPXReader
+from hwpx_studio.edit_document import HWPXEditor
+from hwpx_studio.validate import validate
+
+# 읽기
+reader = HWPXReader("document.hwpx")
+reader.load()
+data = reader.to_json(include_styles=True)
+
+# 편집
+editor = HWPXEditor("document.hwpx")
+editor.load()
+editor.replace_text("기존", "변경")
+editor.save("edited.hwpx")
+
+# 검증
+errors = validate("output.hwpx")
 ```
 
-### 2. 문서 읽기 (HWPX → JSON)
+### MCP 서버 (Claude Desktop)
 
-HWPX 문서를 파싱해서 블록 타입이 감지된 JSON으로 변환합니다.
+`claude_desktop_config.json`에 추가:
 
-```bash
-# JSON으로 출력
-python3 scripts/read_document.py document.hwpx --pretty -o output.json
-
-# 스타일 스펙까지 포함
-python3 scripts/read_document.py document.hwpx --pretty --include-styles -o output.json
+```json
+{
+  "mcpServers": {
+    "hwpx-studio": {
+      "command": "hwpx-mcp"
+    }
+  }
+}
 ```
 
-### 3. 기존 문서 편집
+제공되는 tool: `hwpx_create`, `hwpx_read`, `hwpx_edit`, `hwpx_validate`, `hwpx_extract_text`
 
-서식을 완벽히 보존하면서 내용만 수정합니다.
+### Agent Skill 모드
 
-```bash
-# 텍스트 찾아 바꾸기
-python3 scripts/edit_document.py doc.hwpx --replace "원본" "수정" -o edited.hwpx
-
-# 정규식 찾아 바꾸기
-python3 scripts/edit_document.py doc.hwpx --replace "2024년 \d+월" "2025년 3월" --regex -o edited.hwpx
-
-# JSON 편집 스크립트로 복합 작업 (삽입/삭제/교체/순서변경/머리말 등)
-python3 scripts/edit_document.py doc.hwpx --edit-json commands.json -o edited.hwpx
-```
-
-수동 XML 편집도 가능합니다:
+Claude Code, Cursor, Codex CLI에서 스킬 디렉토리에 넣으면 자동 활성화:
 
 ```bash
-python3 scripts/office/unpack.py document.hwpx ./unpacked/
-# XML 수정
-python3 scripts/office/pack.py ./unpacked/ edited.hwpx
-```
+# Claude Code
+cp -r hwpx-studio ~/.claude/skills/hwpx-studio
 
-### 4. 텍스트 추출
-
-문서에서 텍스트만 뽑습니다. 표도 포함되고, 마크다운으로도 뽑을 수 있습니다.
-
-```bash
-python3 scripts/text_extract.py document.hwpx --format markdown
-```
-
-### 5. 문서 검증
-
-ZIP 구조, XML 유효성, mimetype 위치 같은 걸 점검합니다.
-
-```bash
-python3 scripts/validate.py result.hwpx
-```
-
-### 6. 레퍼런스 기반 복원
-
-이게 핵심입니다. 원본 문서를 분석해서 스타일과 구조를 통째로 가져온 뒤, 내용만 갈아끼웁니다. HWPX 파일을 첨부하면 이 흐름이 자동으로 돌아갑니다.
-
-```bash
-# 분석
-python3 scripts/analyze_template.py reference.hwpx \
-  --extract-header /tmp/ref_header.xml \
-  --extract-section /tmp/ref_section.xml
-
-# 빌드
-python3 scripts/build_hwpx.py \
-  --header /tmp/ref_header.xml \
-  --section /tmp/new_section0.xml \
-  --output result.hwpx
-
-# 검증 + 페이지 가드
-python3 scripts/validate.py result.hwpx
-python3 scripts/page_guard.py --reference reference.hwpx --output result.hwpx
+# Cursor
+cp -r hwpx-studio ~/.cursor/skills/hwpx-studio
 ```
 
 ## 템플릿
@@ -167,30 +111,30 @@ python3 scripts/page_guard.py --reference reference.hwpx --output result.hwpx
 | proposal | 제안서 | 색상 헤더, 번호 뱃지 |
 | kcup | KCUP 보고서 | 독립 헤더, 20mm 여백, 전용 폰트 |
 
+## 스크립트 / CLI
+
+| CLI 명령 | 하는 일 |
+|----------|---------|
+| `hwpx-create` | JSON → HWPX 원커맨드 파이프라인 |
+| `hwpx-read` | HWPX → JSON 역변환 (35개 블록 타입) |
+| `hwpx-edit` | HWPX 인플레이스 편집 |
+| `hwpx-validate` | HWPX 구조 검증 |
+| `hwpx-build` | 템플릿 + XML → HWPX 조립 |
+| `hwpx-section` | JSON → section0.xml 생성 |
+| `hwpx-analyze` | 레퍼런스 HWPX 심층 분석 |
+| `hwpx-extract` | 텍스트 추출 |
+| `hwpx-diff` | 텍스트/구조 비교 |
+| `hwpx-guard` | 페이지 드리프트 감지 |
+| `hwpx-pack` | 디렉토리 → HWPX |
+| `hwpx-unpack` | HWPX → 디렉토리 |
+| `hwpx-mcp` | MCP 서버 (stdio) |
+
 ## 요구사항
 
-- Python 3.6 이상
-- lxml (`pip install lxml`)
-- 가상환경 권장
+- Python 3.10+
+- lxml >= 4.9
+- (선택) mcp >= 1.0 — MCP 서버용
 
-## 스크립트
+## 라이선스
 
-| 스크립트 | 하는 일 |
-|----------|---------|
-| `create_document.py` | JSON → HWPX 원커맨드 파이프라인 |
-| `read_document.py` | HWPX → JSON 역변환 (35개 블록 타입 감지, 라운드트립) |
-| `edit_document.py` | HWPX 인플레이스 편집 (텍스트 교체/블록 삽입·삭제·수정/H·F 변경) |
-| `section_builder.py` | JSON → section0.xml 동적 생성 (35개 블록 타입) |
-| `build_hwpx.py` | 템플릿 + XML 조합해서 HWPX 생성 |
-| `analyze_template.py` | 레퍼런스 HWPX 심층 분석 |
-| `property_registry.py` | 동적 charPr/paraPr/borderFill 할당 |
-| `office/unpack.py` | HWPX를 디렉토리로 풀기 |
-| `office/pack.py` | 디렉토리를 HWPX로 묶기 |
-| `validate.py` | HWPX 구조 검증 |
-| `page_guard.py` | 원본 대비 페이지 수 변동 감지 |
-| `diff_docs.py` | 텍스트 diff + 구조 비교 |
-| `text_extract.py` | 텍스트 추출 |
-
-## 자세한 사용법
-
-스타일 ID 체계, XML 구조 규칙, 템플릿별 charPr/paraPr 매핑, JSON 편집 스크립트 형식 같은 건 [SKILL.md](./SKILL.md)에 다 정리되어 있습니다.
+MIT

@@ -40,8 +40,11 @@ from property_registry import PropertyRegistry
 
 # Resolve paths relative to this script
 SCRIPT_DIR = Path(__file__).resolve().parent
-SKILL_DIR = SCRIPT_DIR.parent
-TEMPLATES_DIR = SKILL_DIR / "templates"
+# 패키지 모드: src/hwpx_studio/templates/ (pip install 시)
+_PKG_TEMPLATES = SCRIPT_DIR / "templates"
+# 스킬 모드: scripts/../templates/ (scripts/ 에서 직접 실행)
+_SKILL_TEMPLATES = SCRIPT_DIR.parent / "templates"
+TEMPLATES_DIR = _PKG_TEMPLATES if _PKG_TEMPLATES.is_dir() else _SKILL_TEMPLATES
 BASE_DIR = TEMPLATES_DIR / "base"
 
 AVAILABLE_TEMPLATES = ["gonmun", "report", "minutes", "kcup", "proposal"]
