@@ -1,13 +1,29 @@
 # HWPX Skill CHANGELOG
 
 ## 현재 상태
-- 버전: v1.6 (P3: 캡션 + 책갈피 + 필드)
+- 버전: v1.6.1 (Phase 1 종합 검증 완료 + 버그픽스)
 - Git: https://github.com/Victor-jh/hwpxskill (forked from Canine89/hwpxskill)
 - Cowork 경로: ~/HWPX Skill Dev
 - 스크립트: build_hwpx.py, analyze_template.py, section_builder.py, create_document.py, property_registry.py, diff_docs.py, validate.py, page_guard.py, text_extract.py, office/unpack.py, office/pack.py
 - 템플릿: base, gonmun, report, minutes, proposal, **kcup**
 - JSON 타입: 19 기본 + 16 KCUP 전용 = 35개
 - 동적 서식: charPr/paraPr/borderFill을 JSON dict로 인라인 지정 가능
+
+## 2026-03-22 (Cowork 세션 #7) — Phase 1 종합 검증 + 버그픽스
+
+### 버그픽스
+1. **label_value `pairs` 키 미지원 (문서 열기 실패 원인)**
+   - `make_label_value()`가 `items` 키만 읽고 `pairs` 키를 무시 → 0행 테이블 생성 → OWPML 유효성 위반
+   - `pairs: [["라벨", "값"], ...]` 간편 형식 + `items: [{"label":"라벨","value":"값"}, ...]` 상세 형식 모두 지원
+2. **table cell charPr dict 미해석** — `cell_text_to_paragraphs()`에 `registry` 파라미터 체인 추가
+3. **create_document.py JSON template 키 무시** — CLI `--template` 없을 때 JSON의 `"template"` 키를 fallback으로 사용
+4. **charPr bold/italic 속성→자식 요소** — `_build_charpr_element()`에서 `bold="1"` 속성 대신 `<hh:bold/>` 자식 요소로 수정 (OWPML 표준 준수)
+
+### Phase 1 종합 검증 결과
+- 19개 기본 블록 타입 + 레이아웃 기능 전체 한컴독스 Web 에디터 렌더링 확인 ✅
+- 검증 항목: heading(1/2/3), text, bullet, numbered, indent, note, table, label_value, signature, empty, separator, page_break, hyperlink, text_footnote, text_endnote, textbox(단일/다중줄), caption, bookmark, field(date/page_number/total_pages)
+- 부가 기능: header/footer, 문단배경색(borderFill), 동적 charPr/paraPr(PropertyRegistry)
+- 산출물: phase1_full_v2.hwpx (3쪽, 19개 타입 + 동적 서식 종합)
 
 ## 2026-03-22 (Cowork 세션 #6) — P3: 캡션 + 책갈피 + 필드
 

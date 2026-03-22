@@ -482,15 +482,30 @@ def compute_col_widths(col_count, ratios=None, body_width=None):
     return widths
 
 
-def cell_text_to_paragraphs(cell_data, idgen, default_charPr=0, default_paraPr=22):
+def cell_text_to_paragraphs(cell_data, idgen, default_charPr=0, default_paraPr=22,
+                            registry=None):
     """셀 데이터를 문단 리스트로 변환.
 
     cell_data 형태:
       - str: 단일 문단
-      - {"text": "...", "charPr": N}
+      - {"text": "...", "charPr": N 또는 dict}
       - {"lines": [...]}  → 셀 내 다중 문단
       - {"runs": [...]}   → 다중 run
+
+    registry: PropertyRegistry — charPr/paraPr dict를 ID로 해석
     """
+    def _rc(spec, default):
+        """charPr dict → registry resolve."""
+        if registry and isinstance(spec, dict):
+            return registry.resolve_charPr(spec)
+        return spec if not isinstance(spec, dict) else default
+
+    def _rp(spec, default):
+        """paraPr dict → registry resolve."""
+        if registry and isinstance(spec, dict):
+            return registry.resolve_paraPr(spec)
+        return spec if not isinstance(spec, dict) else default
+
     paragraphs = []
 
     if isinstance(cell_data, str):
@@ -505,8 +520,8 @@ def cell_text_to_paragraphs(cell_data, idgen, default_charPr=0, default_paraPr=2
                         make_paragraph(idgen, paraPr=default_paraPr,
                                        charPr=default_charPr, text=line))
                 elif isinstance(line, dict):
-                    cp = line.get("charPr", default_charPr)
-                    pp = line.get("paraPr", default_paraPr)
+                    cp = _rc(line.get("charPr", default_charPr), default_charPr)
+                    pp = _rp(line.get("paraPr", default_paraPr), default_paraPr)
                     if "runs" in line:
                         runs = build_runs(line)
                         paragraphs.append(
@@ -517,11 +532,11 @@ def cell_text_to_paragraphs(cell_data, idgen, default_charPr=0, default_paraPr=2
                                            text=line.get("text", "")))
         elif "runs" in cell_data:
             runs = build_runs(cell_data)
-            pp = cell_data.get("paraPr", default_paraPr)
+            pp = _rp(cell_data.get("paraPr", default_paraPr), default_paraPr)
             paragraphs.append(make_paragraph(idgen, paraPr=pp, runs=runs))
         else:
-            cp = cell_data.get("charPr", default_charPr)
-            pp = cell_data.get("paraPr", default_paraPr)
+            cp = _rc(cell_data.get("charPr", default_charPr), default_charPr)
+            pp = _rp(cell_data.get("paraPr", default_paraPr), default_paraPr)
             paragraphs.append(
                 make_paragraph(idgen, paraPr=pp, charPr=cp,
                                text=cell_data.get("text", "")))
@@ -539,7 +554,7 @@ def cell_text_to_paragraphs(cell_data, idgen, default_charPr=0, default_paraPr=2
 def make_cell(idgen, col_addr, row_addr, width, height, cell_data,
               col_span=1, row_span=1, borderFillIDRef="3",
               header=False, default_charPr=0, default_paraPr=22,
-              cell_margin=None):
+              cell_margin=None, registry=None):
     tc = etree.Element(hp("tc"))
     tc.set("name", "")
     tc.set("header", "1" if header else "0")
@@ -563,7 +578,8 @@ def make_cell(idgen, col_addr, row_addr, width, height, cell_data,
 
     paras = cell_text_to_paragraphs(cell_data, idgen,
                                      default_charPr=default_charPr,
-                                     default_paraPr=default_paraPr)
+                                     default_paraPr=default_paraPr,
+                                     registry=registry)
     for para in paras:
         sub.append(para)
 
@@ -589,7 +605,7 @@ def make_cell(idgen, col_addr, row_addr, width, height, cell_data,
     return tc
 
 
-def make_table(idgen, item, body_width=None):
+def make_table(idgen, item, body_width=None, registry=None):
     """JSON table 정의에서 hp:tbl 요소를 포함하는 hp:p를 생성."""
     bw = body_width or BODY_WIDTH
     headers = item.get("headers", [])
@@ -727,7 +743,7 @@ def make_table(idgen, item, body_width=None):
                 idgen, col_idx, row_idx, w, h, cell_data,
                 col_span=cs, row_span=rs, borderFillIDRef=bf,
                 header=is_header, default_charPr=cp, default_paraPr=pp,
-                cell_margin=cell_margin)
+                cell_margin=cell_margin, registry=registry)
             tr.append(tc)
 
     return p
@@ -735,9 +751,19 @@ def make_table(idgen, item, body_width=None):
 
 # ── label_value 표 ──────────────────────────────────────────────
 
-def make_label_value(idgen, item, body_width=None):
-    """라벨:값 형태의 2열 표 생성."""
+def make_label_value(idgen, item, body_width=None, registry=None):
+    """라벨:값 형태의 2열 표 생성.
+
+    JSON 입력 형식 2가지 지원:
+      - pairs: [["라벨", "값"], ...]          ← 간편 형식
+      - items: [{"label": "라벨", "value": "값"}, ...]  ← 상세 형식
+    """
+    pairs = item.get("pairs")
     items = item.get("items", [])
+    if pairs:
+        rows = [[p[0], p[1]] for p in pairs]
+    else:
+        rows = [[i.get("label", ""), i.get("value", "")] for i in items]
     label_ratio = item.get("labelRatio", 1)
     value_ratio = item.get("valueRatio", 3)
     row_height = item.get("rowHeight", DEFAULT_ROW_HEIGHT)
@@ -745,7 +771,7 @@ def make_label_value(idgen, item, body_width=None):
     table_item = {
         "colCount": 2,
         "colRatios": [label_ratio, value_ratio],
-        "rows": [[i.get("label", ""), i.get("value", "")] for i in items],
+        "rows": rows,
         "rowHeight": row_height,
         "headerCharPr": item.get("labelCharPr", 9),
         "cellCharPr": item.get("valueCharPr", 0),
@@ -754,7 +780,8 @@ def make_label_value(idgen, item, body_width=None):
         "headerParaPr": item.get("labelParaPr", 21),
         "cellParaPr": item.get("valueParaPr", 22),
     }
-    return make_table(idgen, table_item, body_width=body_width)
+    return make_table(idgen, table_item, body_width=body_width,
+                      registry=registry)
 
 
 # ── signature 블록 ──────────────────────────────────────────────
@@ -2220,10 +2247,12 @@ def build_section(json_data, base_section_path=None, template=None,
                                        text=full_text))
 
         elif item_type == "table":
-            sec.append(make_table(idgen, item, body_width=body_width))
+            sec.append(make_table(idgen, item, body_width=body_width,
+                                   registry=registry))
 
         elif item_type == "label_value":
-            sec.append(make_label_value(idgen, item, body_width=body_width))
+            sec.append(make_label_value(idgen, item, body_width=body_width,
+                                         registry=registry))
 
         elif item_type == "signature":
             for p in make_signature(idgen, item):
@@ -2498,10 +2527,12 @@ def _build_item(idgen, item, body_width, template):
                                         text=full_text))
 
     elif item_type == "table":
-        elements.append(make_table(idgen, item, body_width=body_width))
+        elements.append(make_table(idgen, item, body_width=body_width,
+                                    registry=registry))
 
     elif item_type == "label_value":
-        elements.append(make_label_value(idgen, item, body_width=body_width))
+        elements.append(make_label_value(idgen, item, body_width=body_width,
+                                          registry=registry))
 
     elif item_type == "signature":
         for p in make_signature(idgen, item):

@@ -92,6 +92,14 @@ def main():
     output_path = Path(args.output).resolve()
     template_name = resolve_template(args.style, args.template)
 
+    # JSON에서 template fallback 읽기
+    with open(json_path, "r", encoding="utf-8") as f:
+        json_data = json.load(f)
+    if not template_name:
+        json_template = json_data.get("template")
+        if json_template and json_template != "base":
+            template_name = json_template
+
     # base section 결정
     base_section = None
     if args.base_section:
@@ -100,10 +108,6 @@ def main():
         candidate = TEMPLATES_DIR / template_name / "section0.xml"
         if candidate.exists():
             base_section = candidate
-
-    # 다중 섹션 감지
-    with open(json_path, "r", encoding="utf-8") as f:
-        json_data = json.load(f)
     is_multi = "sections" in json_data
 
     if is_multi:

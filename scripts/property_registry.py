@@ -480,14 +480,6 @@ class PropertyRegistry:
         el.set("symMark", spec.get("symMark", "NONE"))
         el.set("borderFillIDRef", str(spec.get("borderFillIDRef", "2")))
 
-        # bold/italic
-        bold = spec.get("bold", False)
-        italic = spec.get("italic", False)
-        if bold:
-            el.set("bold", "1")
-        if italic:
-            el.set("italic", "1")
-
         # fontRef — 모든 lang 동일 값
         font_ref = str(spec.get("fontRef", 1))
         fr = etree.SubElement(el, _hh("fontRef"))
@@ -519,6 +511,12 @@ class PropertyRegistry:
         for lang in ("hangul", "latin", "hanja", "japanese",
                       "other", "symbol", "user"):
             off.set(lang, "0")
+
+        # bold/italic — OWPML에서는 자식 요소 (<hh:bold/>, <hh:italic/>)
+        if spec.get("bold", False):
+            etree.SubElement(el, _hh("bold"))
+        if spec.get("italic", False):
+            etree.SubElement(el, _hh("italic"))
 
         # underline
         ul = etree.SubElement(el, _hh("underline"))
