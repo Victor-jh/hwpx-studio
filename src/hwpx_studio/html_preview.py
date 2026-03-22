@@ -315,8 +315,29 @@ def _render_kcup(block: dict) -> str:
 
     # [붙임]
     if sub == "attachment":
-        text = escape(block.get("text", ""))
+        text = escape(block.get("text", block.get("title", "")))
         return f'<div class="kcup-attach">[붙임] {text}</div>'
+
+    # [붙임] + 표 복합
+    if sub == "attachment_table":
+        title = escape(block.get("title", block.get("text", "")))
+        rows = block.get("rows", [])
+        headers = block.get("headers", [])
+        html = f'<div class="kcup-attach">[붙임] {title}</div>\n'
+        html += '<table>'
+        if headers:
+            html += '<thead><tr>'
+            for h in headers:
+                html += f'<th>{escape(str(h))}</th>'
+            html += '</tr></thead>'
+        html += '<tbody>'
+        for row in rows:
+            html += '<tr>'
+            for cell in row:
+                html += f'<td>{escape(str(cell))}</td>'
+            html += '</tr>'
+        html += '</tbody></table>'
+        return html
 
     # ☞ 포인터
     if sub == "pointer":

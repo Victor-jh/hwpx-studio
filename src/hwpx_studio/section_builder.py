@@ -2033,6 +2033,36 @@ def make_kcup_attachment(idgen, item):
     return make_paragraph(idgen, paraPr=pp, charPr=cp, text=f"[붙임] {title}")
 
 
+def make_kcup_attachment_table(idgen, item, body_width=None, registry=None):
+    """[붙임] 제목 + 표 복합 블록.
+
+    JSON DSL:
+        {"type": "kcup_attachment_table",
+         "title": "세부 현황",
+         "rows": [["구분","값"], ["A","1"]],
+         // 이하 table과 동일한 옵션 지원
+         "headers": [...], "colRatios": [...], ...}
+
+    생성 결과: [붙임_문단, 표_문단] 리스트.
+    """
+    # 1) [붙임] 제목 문단
+    title = item.get("title", item.get("text", ""))
+    pp = item.get("paraPr", KCUP_PP["o"])
+    cp = item.get("charPr", KCUP_CP["body"])
+    attach_p = make_paragraph(idgen, paraPr=pp, charPr=cp,
+                              text=f"[붙임] {title}")
+
+    # 2) 표 — item에서 table 관련 키를 그대로 전달
+    table_item = {k: v for k, v in item.items()
+                  if k not in ("type", "title", "paraPr", "charPr")}
+    if "rows" not in table_item:
+        table_item["rows"] = []
+    table_p = make_table(idgen, table_item, body_width=body_width,
+                         registry=registry)
+
+    return [attach_p, table_p]
+
+
 def make_kcup_pointer(idgen, item):
     """☞ 강조 포인터: charPr17:"☞ " + charPr(지정):"강조 내용"."""
     text = item.get("text", "")
@@ -2074,7 +2104,7 @@ _KCUP_CONTENT_TYPES = (_KCUP_BOX_TYPES | _KCUP_MID_TYPES |
 _KCUP_PASSTHROUGH = {"text", "empty", "heading", "bullet", "numbered", "kcup_cover",
                      "indent", "note", "table", "label_value", "signature",
                      "pagebreak", "kcup_note", "kcup_attachment",
-                     "kcup_pointer", "kcup_mixed_run"}
+                     "kcup_attachment_table", "kcup_pointer", "kcup_mixed_run"}
 
 
 def auto_spacing(content):
@@ -2381,6 +2411,12 @@ def build_section(json_data, base_section_path=None, template=None,
         elif item_type == "kcup_attachment":
             sec.append(make_kcup_attachment(idgen, item))
 
+        elif item_type == "kcup_attachment_table":
+            for el in make_kcup_attachment_table(idgen, item,
+                                                  body_width=body_width,
+                                                  registry=registry):
+                sec.append(el)
+
         elif item_type == "kcup_pointer":
             sec.append(make_kcup_pointer(idgen, item))
 
@@ -2636,6 +2672,8 @@ def _build_item(idgen, item, body_width, template, registry=None):
         elements.append(make_kcup_note(idgen, item))
     elif item_type == "kcup_attachment":
         elements.append(make_kcup_attachment(idgen, item))
+    elif item_type == "kcup_attachment_table":
+        elements.extend(make_kcup_attachment_table(idgen, item))
     elif item_type == "kcup_pointer":
         elements.append(make_kcup_pointer(idgen, item))
     elif item_type == "kcup_mixed_run":

@@ -156,6 +156,29 @@ def _postprocess_kcup_cover(blocks: list[dict]) -> list[dict]:
     return [cover_block] + blocks[end:]
 
 
+def _postprocess_kcup_attachment_table(blocks: list[dict]) -> list[dict]:
+    """kcup_attachment 바로 뒤에 table이 오면 kcup_attachment_table로 합침."""
+    result = []
+    i = 0
+    while i < len(blocks):
+        b = blocks[i]
+        if (b.get("type") == "kcup_attachment"
+                and i + 1 < len(blocks)
+                and blocks[i + 1].get("type") == "table"):
+            merged = {"type": "kcup_attachment_table",
+                      "title": b.get("title", b.get("text", ""))}
+            tbl = blocks[i + 1]
+            for k, v in tbl.items():
+                if k != "type":
+                    merged[k] = v
+            result.append(merged)
+            i += 2
+        else:
+            result.append(b)
+            i += 1
+    return result
+
+
 # ── 스타일 레지스트리 (header.xml 파싱) ──────────────────────────
 
 class StyleRegistry:
@@ -1199,7 +1222,9 @@ class HWPXReader:
                                              paraPr, charPr)
             blocks.append(block)
 
-        result["blocks"] = _postprocess_kcup_cover(blocks)
+        blocks = _postprocess_kcup_cover(blocks)
+        blocks = _postprocess_kcup_attachment_table(blocks)
+        result["blocks"] = blocks
 
         if header_footer_info:
             result.update(header_footer_info)
