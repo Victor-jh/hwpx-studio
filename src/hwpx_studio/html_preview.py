@@ -209,6 +209,18 @@ a:hover { text-decoration: underline; }
     font-size: 14pt;
 }
 
+/* kcup 표지 */
+.kcup-cover {
+    text-align: center; padding: 80pt 0 40pt;
+    border-bottom: 2px solid #333; margin-bottom: 24pt;
+}
+.kcup-cover .cover-title {
+    font-size: 19pt; font-weight: 700; margin-bottom: 20pt;
+    font-family: 'Noto Sans KR', sans-serif; letter-spacing: 1pt;
+}
+.kcup-cover .cover-date { font-size: 14pt; color: #444; margin-top: 12pt; }
+.kcup-cover .cover-author { font-size: 14pt; color: #555; margin-top: 6pt; }
+
 /* ── empty (간격줄) ── */
 .empty-line { height: 4pt; }
 """
@@ -219,6 +231,20 @@ def _render_kcup(block: dict) -> str:
     """KCUP 전용 블록을 HTML로 변환."""
     btype = block.get("type", "")
     sub = btype.replace("kcup_", "")
+
+    # 표지
+    if sub == "cover":
+        title = escape(block.get("title", block.get("text", "")))
+        date = escape(block.get("date", ""))
+        author = escape(block.get("author", ""))
+        parts = ['<div class="kcup-cover">']
+        parts.append(f'<div class="cover-title">{title}</div>')
+        if date:
+            parts.append(f'<div class="cover-date">{date}</div>')
+        if author:
+            parts.append(f'<div class="cover-author">{author}</div>')
+        parts.append('</div>')
+        return "\n".join(parts)
 
     # □ 섹션 헤더
     if sub == "box":

@@ -1829,6 +1829,51 @@ def _inject_header_footer(sec, idgen, json_data, body_width=None, registry=None)
     sec.insert(1, hf_p)
 
 
+# ── KCUP 표지 생성 함수 ──────────────────────────────────────────
+
+def make_kcup_cover(idgen, item):
+    """KCUP 표지 블록: 빈줄 + 제목(19pt HY헤드라인M) + 빈줄 + 날짜 + 빈줄×2.
+
+    JSON DSL:
+        {"type": "kcup_cover", "title": "문서 제목", "date": "2026. 3. 22.",
+         "author": "OO팀"}
+    author는 선택. 생략 시 날짜만 표시.
+    """
+    title = item.get("title", item.get("text", ""))
+    date = item.get("date", "")
+    author = item.get("author", "")
+
+    elements = []
+
+    # 상단 빈줄 3개 (표지 여백)
+    for _ in range(3):
+        elements.append(make_empty(idgen, paraPr=KCUP_PP["box"], charPr=KCUP_CP["gap14"]))
+
+    # 제목 (charPr=15: 19pt HY헤드라인M 볼드, paraPr=20: CENTER)
+    cp_title = item.get("charPr", KCUP_CP["cover_title"])
+    pp_center = 20  # CENTER 정렬
+    elements.append(make_paragraph(idgen, paraPr=pp_center, charPr=cp_title, text=title))
+
+    # 빈줄 2개
+    for _ in range(2):
+        elements.append(make_empty(idgen, paraPr=pp_center, charPr=KCUP_CP["body"]))
+
+    # 날짜
+    if date:
+        elements.append(make_paragraph(idgen, paraPr=pp_center, charPr=KCUP_CP["body"], text=date))
+
+    # 작성자/소속
+    if author:
+        elements.append(make_empty(idgen, paraPr=pp_center, charPr=KCUP_CP["body"]))
+        elements.append(make_paragraph(idgen, paraPr=pp_center, charPr=KCUP_CP["body"], text=author))
+
+    # 하단 빈줄 2개 (본문과 분리)
+    for _ in range(2):
+        elements.append(make_empty(idgen, paraPr=KCUP_PP["box"], charPr=KCUP_CP["gap14"]))
+
+    return elements
+
+
 # ── KCUP 전용 블록 생성 함수 ──────────────────────────────────────
 
 def _kcup_box_title(title):
@@ -2026,7 +2071,7 @@ _KCUP_SPACING_TYPES = {"kcup_box_spacing", "kcup_o_spacing",
 _KCUP_CONTENT_TYPES = (_KCUP_BOX_TYPES | _KCUP_MID_TYPES |
                         _KCUP_MID_HEADING_TYPES | _KCUP_DETAIL_TYPES)
 # 간격줄 삽입 대상이 아닌 타입 (표지, 서명, 표 등)
-_KCUP_PASSTHROUGH = {"text", "empty", "heading", "bullet", "numbered",
+_KCUP_PASSTHROUGH = {"text", "empty", "heading", "bullet", "numbered", "kcup_cover",
                      "indent", "note", "table", "label_value", "signature",
                      "pagebreak", "kcup_note", "kcup_attachment",
                      "kcup_pointer", "kcup_mixed_run"}
@@ -2180,7 +2225,7 @@ def build_section(json_data, base_section_path=None, template=None,
             pp = _resolve_pp(item, 0, registry)
             sec.append(make_empty(idgen, paraPr=pp, charPr=cp))
 
-        elif item_type == "text":
+        elif item_type in ("text", "paragraph"):
             runs = build_runs_with_registry(item, registry)
             cp = _resolve_cp(item, 0, registry)
             pp = _resolve_pp(item, 0, registry)
@@ -2462,7 +2507,7 @@ def _build_item(idgen, item, body_width, template, registry=None):
     if item_type == "empty":
         elements.append(make_empty(idgen))
 
-    elif item_type == "text":
+    elif item_type in ("text", "paragraph"):
         runs = build_runs(item)
         cp = item.get("charPr", 0)
         pp = item.get("paraPr", 0)
@@ -2559,6 +2604,8 @@ def _build_item(idgen, item, body_width, template, registry=None):
         elements.append(make_text_with_footnote(idgen, item))
 
     # ── KCUP 전용 타입 ────────────────────────────────
+    elif item_type == "kcup_cover":
+        elements.extend(make_kcup_cover(idgen, item))
     elif item_type == "kcup_box":
         elements.append(make_kcup_box(idgen, item))
     elif item_type == "kcup_box_spacing":
