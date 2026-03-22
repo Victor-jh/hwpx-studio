@@ -2,14 +2,13 @@
 
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 
-# scripts/ 를 import 경로에 추가
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
+# src/hwpx_studio/ 를 import 경로에 추가
+SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "hwpx_studio"
+sys.path.insert(0, str(SRC_DIR))
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = SKILL_DIR / "templates"

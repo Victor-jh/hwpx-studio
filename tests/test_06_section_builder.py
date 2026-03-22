@@ -11,9 +11,9 @@ from pathlib import Path
 import pytest
 from lxml import etree
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
+SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "hwpx_studio"
 SKILL_DIR = Path(__file__).resolve().parent.parent
-SB_CMD = [sys.executable, str(SCRIPTS_DIR / "section_builder.py")]
+SB_CMD = [sys.executable, str(SRC_DIR / "section_builder.py")]
 
 # base section0.xml 경로 (secPr 복사용)
 BASE_SECTION = SKILL_DIR / "templates" / "base" / "Contents" / "section0.xml"
@@ -29,7 +29,7 @@ def _build_section(blocks: list[dict], tmp_dir: Path, name: str = "test") -> Pat
     result = subprocess.run(
         SB_CMD + [str(json_path), "-o", str(out),
                   "--base-section", str(BASE_SECTION)],
-        capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+        capture_output=True, text=True, cwd=str(SRC_DIR),
     )
     assert result.returncode == 0, f"section_builder 실패: {result.stderr}"
     assert out.exists()

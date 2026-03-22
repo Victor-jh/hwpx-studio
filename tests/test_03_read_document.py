@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-READ_CMD = [sys.executable, str(SCRIPTS_DIR / "read_document.py")]
+SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "hwpx_studio"
+READ_CMD = [sys.executable, str(SRC_DIR / "read_document.py")]
 SKILL_DIR = Path(__file__).resolve().parent.parent
 
 SAMPLE_FILES = sorted(SKILL_DIR.glob("*.hwpx"))
@@ -28,7 +28,7 @@ class TestReadExisting:
         out = tmp_dir / f"{hwpx_file.stem}.json"
         result = subprocess.run(
             READ_CMD + [str(hwpx_file), "-o", str(out), "--pretty"],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, \
             f"read 실패 ({hwpx_file.name}): {result.stderr}"
@@ -54,7 +54,7 @@ class TestReadExisting:
         out = tmp_dir / f"{hwpx_file.stem}_types.json"
         result = subprocess.run(
             READ_CMD + [str(hwpx_file), "-o", str(out), "--pretty"],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         if result.returncode != 0:
             pytest.skip(f"read 실패: {result.stderr[:200]}")
@@ -74,7 +74,7 @@ class TestReadStdout:
         sample = min(SAMPLE_FILES, key=lambda f: f.stat().st_size)
         result = subprocess.run(
             READ_CMD + [str(sample)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, f"stdout 모드 실패: {result.stderr}"
         data = json.loads(result.stdout)
@@ -91,7 +91,7 @@ class TestReadStyles:
         out = tmp_dir / "styled.json"
         result = subprocess.run(
             READ_CMD + [str(sample), "-o", str(out), "--pretty", "--include-styles"],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         if result.returncode != 0:
             pytest.skip(f"read 실패: {result.stderr[:200]}")

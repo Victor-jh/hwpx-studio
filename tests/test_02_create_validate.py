@@ -4,17 +4,15 @@ JSON → HWPX 생성 후 validate 통과 확인.
 각 스타일/템플릿, 다양한 블록 타입 조합.
 """
 
-import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-
 from validate import validate
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-CREATE_CMD = [sys.executable, str(SCRIPTS_DIR / "create_document.py")]
+SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "hwpx_studio"
+CREATE_CMD = [sys.executable, str(SRC_DIR / "create_document.py")]
 
 STYLES = ["kcup", "gonmun", "report", "minutes", "proposal"]
 
@@ -29,7 +27,7 @@ class TestCreateMinimal:
         out = tmp_dir / f"{style}_minimal.hwpx"
         result = subprocess.run(
             CREATE_CMD + [str(minimal_json), "--style", style, "-o", str(out)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, f"create 실패 ({style}): {result.stderr}"
         assert out.exists(), f"출력 파일 없음: {out}"
@@ -41,7 +39,7 @@ class TestCreateMinimal:
         out = tmp_dir / "report_minimal.hwpx"
         result = subprocess.run(
             CREATE_CMD + [str(minimal_json), "--template", "report", "-o", str(out)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, f"create 실패 (report): {result.stderr}"
         errors = validate(str(out))
@@ -57,7 +55,7 @@ class TestCreateMultiBlock:
         out = tmp_dir / "multi_report.hwpx"
         result = subprocess.run(
             CREATE_CMD + [str(multi_block_json), "--style", "report", "-o", str(out)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, f"create 실패: {result.stderr}"
         errors = validate(str(out))
@@ -71,7 +69,7 @@ class TestCreateSpecialBlocks:
         out = tmp_dir / "hyperlink.hwpx"
         result = subprocess.run(
             CREATE_CMD + [str(hyperlink_json), "--style", "report", "-o", str(out)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, f"create 실패: {result.stderr}"
         errors = validate(str(out))
@@ -81,7 +79,7 @@ class TestCreateSpecialBlocks:
         out = tmp_dir / "footnote.hwpx"
         result = subprocess.run(
             CREATE_CMD + [str(footnote_json), "--style", "report", "-o", str(out)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, f"create 실패: {result.stderr}"
         errors = validate(str(out))
@@ -91,7 +89,7 @@ class TestCreateSpecialBlocks:
         out = tmp_dir / "bookmark.hwpx"
         result = subprocess.run(
             CREATE_CMD + [str(bookmark_json), "--style", "report", "-o", str(out)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, f"create 실패: {result.stderr}"
         errors = validate(str(out))
@@ -101,7 +99,7 @@ class TestCreateSpecialBlocks:
         out = tmp_dir / "label_value.hwpx"
         result = subprocess.run(
             CREATE_CMD + [str(label_value_json), "--style", "report", "-o", str(out)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, f"create 실패: {result.stderr}"
         errors = validate(str(out))
@@ -117,7 +115,7 @@ class TestCreateKCUP:
         out = tmp_dir / "kcup_test.hwpx"
         result = subprocess.run(
             CREATE_CMD + [str(kcup_json), "--style", "kcup", "-o", str(out)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert result.returncode == 0, f"create 실패: {result.stderr}"
         errors = validate(str(out))

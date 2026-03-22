@@ -68,18 +68,32 @@ def hwpx_create(
     output_path: str,
     style: str = "report",
 ) -> str:
-    """JSON DSL로 HWPX 문서를 생성합니다.
+    """JSON DSL로 HWPX(한글) 문서를 생성합니다.
 
     Args:
-        json_dsl: JSON 문자열. {"blocks": [...]} 형태의 문서 구조 정의.
-            블록 타입: paragraph, heading, table, bullet, numbered, indent,
-            note, pagebreak, signature, label_value, hyperlink, bookmark,
-            footnote, image, textbox, field_date, field_page 등.
+        json_dsl: JSON 문자열. 아래 예시 참고.
         output_path: 생성할 HWPX 파일 경로 (예: /tmp/output.hwpx)
-        style: 템플릿 스타일 (report, gonmun, kcup, minutes, proposal)
+        style: 템플릿 — report(보고서), gonmun(공문서), kcup, minutes(회의록), proposal(제안서)
 
-    Returns:
-        성공 시 생성된 파일 경로, 실패 시 에러 메시지.
+    예시 1 — 기본 보고서:
+        {"blocks": [
+            {"type": "heading", "level": 1, "text": "3분기 실적 보고"},
+            {"type": "paragraph", "text": "2024년 3분기 매출은 전년 대비 15% 증가했습니다."},
+            {"type": "table", "rows": [["구분","금액"],["매출","150억"],["영업이익","30억"]]},
+            {"type": "bullet", "text": "신규 고객 200건 확보"},
+            {"type": "numbered", "text": "다음 단계: 해외 진출 검토"}
+        ]}
+
+    예시 2 — 서식 지정:
+        {"blocks": [
+            {"type": "heading", "level": 1, "text": "제목", "charPr": {"bold": true}},
+            {"type": "paragraph", "text": "강조 텍스트", "charPr": {"bold": true, "color": "#FF0000"}},
+            {"type": "label_value", "label": "담당자", "value": "홍길동"}
+        ]}
+
+    전체 블록 타입: heading(level:1-3), paragraph, bullet, numbered, indent, note,
+    table(rows 배열), pagebreak, signature, label_value, hyperlink(url), bookmark(name),
+    footnote(text_footnote), image(path/base64), textbox, field_date, field_page
     """
     try:
         data = json.loads(json_dsl)
@@ -131,15 +145,15 @@ def hwpx_read(
     input_path: str,
     include_styles: bool = False,
 ) -> str:
-    """HWPX 문서를 읽어 JSON으로 변환합니다 (라운드트립 지원).
+    """HWPX 문서를 읽어 JSON으로 변환합니다. 라운드트립 지원(JSON→HWPX→JSON 보존).
 
     Args:
-        input_path: 읽을 HWPX 파일 경로.
+        input_path: HWPX 파일 경로.
         include_styles: True이면 charPr/paraPr 스타일 정보도 포함.
 
     Returns:
-        JSON 문자열 (section_builder 호환 형식).
-        블록 타입 35개 감지: paragraph, heading, table, bullet, numbered 등.
+        {"blocks": [{"type": "heading", "text": "..."}, ...]} 형태의 JSON.
+        35개 블록 타입 자동 감지. 이 JSON을 hwpx_create에 그대로 넘기면 동일 문서 재생성 가능.
     """
     path = Path(input_path)
     if not path.exists():
@@ -161,19 +175,20 @@ def hwpx_edit(
     output_path: str,
     operations: str,
 ) -> str:
-    """HWPX 문서를 편집합니다 (텍스트 치환, 블록 삽입/삭제).
+    """HWPX 문서를 편집합니다. 원본 서식/이미지/표 구조 완벽 보존.
 
     Args:
         input_path: 원본 HWPX 파일 경로.
         output_path: 편집된 HWPX 저장 경로.
-        operations: JSON 배열 문자열. 각 항목은 편집 연산:
-            - {"op": "replace", "old": "기존텍스트", "new": "새텍스트"}
-            - {"op": "replace_regex", "pattern": "정규식", "replacement": "대체문"}
-            - {"op": "insert", "index": 0, "block": {"type": "paragraph", "text": "..."}}
-            - {"op": "delete", "index": 2}
+        operations: JSON 배열 문자열. 예시:
+            [
+                {"op": "replace", "old": "2024년", "new": "2025년"},
+                {"op": "replace_regex", "pattern": "\\d+월", "replacement": "3월"},
+                {"op": "insert", "index": 0, "block": {"type": "paragraph", "text": "추가 문단"}},
+                {"op": "delete", "index": 5}
+            ]
 
-    Returns:
-        성공 시 편집 결과 요약, 실패 시 에러 메시지.
+    op 종류: replace(텍스트 치환), replace_regex(정규식), insert(블록 삽입), delete(블록 삭제)
     """
     if not Path(input_path).exists():
         return f"ERROR: 파일 없음 — {input_path}"
@@ -279,6 +294,44 @@ def hwpx_extract_text(input_path: str) -> str:
         return text if text.strip() else "(빈 문서)"
     except Exception as e:
         return f"ERROR: 텍스트 추출 실패 — {type(e).__name__}: {e}"
+
+
+# ── Tool 6: preview ───────────────────────────────────────────────
+@mcp.tool()
+def hwpx_preview(
+    input_path: str,
+    output_path: str = "",
+) -> str:
+    """HWPX 문서를 HTML 미리보기로 변환합니다. 한컴오피스 없이 결과를 즉시 확인할 수 있습니다.
+
+    Args:
+        input_path: HWPX 파일 경로.
+        output_path: 출력 HTML 파일 경로 (비어 있으면 input_path.html로 자동 생성).
+
+    Returns:
+        생성된 HTML 파일 경로, 또는 에러 메시지.
+    """
+    path = Path(input_path)
+    if not path.exists():
+        return f"ERROR: 파일 없음 — {input_path}"
+
+    try:
+        try:
+            from hwpx_studio.html_preview import hwpx_to_html
+        except ImportError:
+            from html_preview import hwpx_to_html
+
+        html = hwpx_to_html(str(path))
+
+        if not output_path:
+            output_path = str(path.with_suffix(".html"))
+
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(html, encoding="utf-8")
+        return f"OK: {out}"
+    except Exception as e:
+        return f"ERROR: 미리보기 생성 실패 — {type(e).__name__}: {e}"
 
 
 # ── 진입점 ────────────────────────────────────────────────────────

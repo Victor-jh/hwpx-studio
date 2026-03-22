@@ -10,12 +10,11 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from validate import validate
 
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-CREATE_CMD = [sys.executable, str(SCRIPTS_DIR / "create_document.py")]
-READ_CMD = [sys.executable, str(SCRIPTS_DIR / "read_document.py")]
+SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "hwpx_studio"
+CREATE_CMD = [sys.executable, str(SRC_DIR / "create_document.py")]
+READ_CMD = [sys.executable, str(SRC_DIR / "read_document.py")]
 
 STYLES = ["report", "kcup", "gonmun"]
 
@@ -31,7 +30,7 @@ class TestRoundtrip:
         hwpx_1 = tmp_dir / f"rt1_{style}.hwpx"
         r1 = subprocess.run(
             CREATE_CMD + [str(multi_block_json), "--style", style, "-o", str(hwpx_1)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert r1.returncode == 0, f"1차 생성 실패: {r1.stderr}"
 
@@ -39,7 +38,7 @@ class TestRoundtrip:
         json_1 = tmp_dir / f"rt1_{style}.json"
         r2 = subprocess.run(
             READ_CMD + [str(hwpx_1), "-o", str(json_1), "--pretty"],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert r2.returncode == 0, f"1차 읽기 실패: {r2.stderr}"
 
@@ -50,7 +49,7 @@ class TestRoundtrip:
         hwpx_2 = tmp_dir / f"rt2_{style}.hwpx"
         r3 = subprocess.run(
             CREATE_CMD + [str(json_1), "--style", style, "-o", str(hwpx_2)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert r3.returncode == 0, f"2차 생성 실패: {r3.stderr}"
 
@@ -62,7 +61,7 @@ class TestRoundtrip:
         json_2 = tmp_dir / f"rt2_{style}.json"
         r4 = subprocess.run(
             READ_CMD + [str(hwpx_2), "-o", str(json_2), "--pretty"],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         assert r4.returncode == 0, f"2차 읽기 실패: {r4.stderr}"
 
@@ -81,26 +80,26 @@ class TestRoundtrip:
         hwpx_1 = tmp_dir / f"rtt1_{style}.hwpx"
         subprocess.run(
             CREATE_CMD + [str(multi_block_json), "--style", style, "-o", str(hwpx_1)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
 
         json_1 = tmp_dir / f"rtt1_{style}.json"
         subprocess.run(
             READ_CMD + [str(hwpx_1), "-o", str(json_1), "--pretty"],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
 
         # 2차: JSON → HWPX → JSON
         hwpx_2 = tmp_dir / f"rtt2_{style}.hwpx"
         subprocess.run(
             CREATE_CMD + [str(json_1), "--style", style, "-o", str(hwpx_2)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
 
         json_2 = tmp_dir / f"rtt2_{style}.json"
         r = subprocess.run(
             READ_CMD + [str(hwpx_2), "-o", str(json_2), "--pretty"],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
         if r.returncode != 0:
             pytest.skip(f"2차 읽기 실패: {r.stderr[:200]}")
@@ -123,14 +122,14 @@ class TestRoundtripMinimal:
         hwpx = tmp_dir / "min_rt.hwpx"
         subprocess.run(
             CREATE_CMD + [str(minimal_json), "--style", "report", "-o", str(hwpx)],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
 
         # HWPX → JSON
         out_json = tmp_dir / "min_rt.json"
         subprocess.run(
             READ_CMD + [str(hwpx), "-o", str(out_json), "--pretty"],
-            capture_output=True, text=True, cwd=str(SCRIPTS_DIR),
+            capture_output=True, text=True, cwd=str(SRC_DIR),
         )
 
         data = json.loads(out_json.read_text(encoding="utf-8"))

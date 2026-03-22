@@ -4,14 +4,14 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-**hwpx-studio** — 한글(HWPX) 문서 생성·읽기·편집 라이브러리 + Claude Skill.
+**hwpx-studio** — 한글(HWPX) 문서 생성·읽기·편집 라이브러리 + MCP 서버 + Claude Skill.
 OWPML(KS X 6101) 표준 기반, lxml + zipfile 직접 조작. 서드파티 HWP 라이브러리 사용 금지.
 
 ## Quick Start
 
 ```bash
 # 패키지 설치 (개발 모드)
-pip install -e ".[test]"
+pip install -e ".[all]"
 
 # 테스트 실행
 pytest tests/ -v
@@ -21,13 +21,15 @@ hwpx-create input.json --style report -o output.hwpx
 hwpx-read document.hwpx --pretty
 hwpx-edit document.hwpx -o edited.hwpx --replace "old" "new"
 hwpx-validate document.hwpx
+
+# MCP 서버
+hwpx-mcp
 ```
 
 ## Architecture
 
 ```
-scripts/              # Skill 모드 (Claude Cowork/Code에서 직접 실행)
-src/hwpx_studio/      # 패키지 모드 (pip install)
+src/hwpx_studio/      # 단일 코드베이스 (패키지 + Skill + 직접 실행)
 templates/            # HWPX 템플릿 (base, gonmun, kcup, report, minutes, proposal)
 tests/                # pytest 테스트 (160개)
 docs/                 # 공문서 작성 가이드, 예시
@@ -57,9 +59,9 @@ else:
     → create_document.py (새 문서 모드)
 ```
 
-### Key Scripts (13개)
+### Key Modules (14개)
 
-| Script | Purpose |
+| Module | Purpose |
 |--------|---------|
 | create_document.py | JSON → HWPX 원커맨드 파이프라인 |
 | read_document.py | HWPX → JSON 역변환 (35개 블록 타입) |
@@ -72,6 +74,7 @@ else:
 | page_guard.py | 페이지 드리프트 위험 검사 |
 | text_extract.py | HWPX 텍스트 추출 |
 | diff_docs.py | 텍스트 + 구조 비교 |
+| mcp_server.py | MCP 서버 (5개 tool: create/read/edit/validate/extract) |
 | office/pack.py | 디렉토리 → HWPX |
 | office/unpack.py | HWPX → 디렉토리 |
 
@@ -87,13 +90,14 @@ pytest tests/test_04_roundtrip.py -v         # 라운드트립 핵심
 pytest tests/test_06_section_builder.py -v   # 블록 타입 전수
 
 # 커버리지
-pytest --cov=scripts --cov-report=term-missing tests/
+pytest --cov=hwpx_studio --cov-report=term-missing tests/
 ```
 
 ## Development Rules
 
 - **Python 3.10+** required
 - **lxml** only external dependency (no python-hwp, no pyhwp)
+- **단일 코드베이스**: src/hwpx_studio/ 만 수정. 패키지/Skill/직접 실행 모두 여기서.
 - **immutability**: XML 조작 시 원본 변경 금지, 항상 새 요소 생성
 - **validate 필수**: 모든 HWPX 생성/편집 후 validate.py 통과 확인
 - **page_guard 필수**: 레퍼런스 대비 페이지 드리프트 검사

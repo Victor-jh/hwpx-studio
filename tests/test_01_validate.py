@@ -3,12 +3,10 @@
 기존 HWPX 샘플 파일의 구조 검증 + 비정상 파일 거부 확인.
 """
 
-import tempfile
 import zipfile
 from pathlib import Path
 
 import pytest
-
 from validate import validate
 
 SKILL_DIR = Path(__file__).resolve().parent.parent

@@ -48,6 +48,7 @@ hwpx-guard = "hwpx_studio.page_guard:main"
 hwpx-pack = "hwpx_studio.office.pack:main"
 hwpx-unpack = "hwpx_studio.office.unpack:main"
 hwpx-mcp = "hwpx_studio.mcp_server:main"
+hwpx-preview = "hwpx_studio.html_preview:main"
 
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
