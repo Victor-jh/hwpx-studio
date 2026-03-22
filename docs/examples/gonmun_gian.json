@@ -1,0 +1,32 @@
+{
+  "title": "○○ 업무 추진 계획",
+  "blocks": [
+    {"type": "heading", "level": 1, "text": "○○ 업무 추진 계획"},
+    {"type": "empty"},
+    {"type": "numbered", "text": "추진 배경"},
+    {"type": "paragraph", "text": "「○○법」 제00조에 따라 다음과 같이 업무를 추진하고자 합니다."},
+    {"type": "empty"},
+    {"type": "numbered", "text": "추진 내용"},
+    {"type": "indent", "text": "가. 대상: 전국 ○○ 기관"},
+    {"type": "indent", "text": "나. 기간: 2025. 4. 1. ~ 2025. 9. 30."},
+    {"type": "indent", "text": "다. 내용"},
+    {"type": "paragraph", "text": "    1) 현황 조사 및 분석"},
+    {"type": "paragraph", "text": "    2) 개선 방안 수립"},
+    {"type": "paragraph", "text": "    3) 시범 운영 및 환류"},
+    {"type": "empty"},
+    {"type": "numbered", "text": "추진 일정"},
+    {"type": "table", "rows": [
+      [{"text": "구분"}, {"text": "기간"}, {"text": "내용"}, {"text": "비고"}],
+      [{"text": "1단계"}, {"text": "4~5월"}, {"text": "현황 조사"}, {"text": ""}],
+      [{"text": "2단계"}, {"text": "6~7월"}, {"text": "개선안 수립"}, {"text": ""}],
+      [{"text": "3단계"}, {"text": "8~9월"}, {"text": "시범 운영"}, {"text": ""}]
+    ]},
+    {"type": "empty"},
+    {"type": "numbered", "text": "행정 사항"},
+    {"type": "indent", "text": "가. 소요 예산: 금50,000,000원(금오천만원)"},
+    {"type": "indent", "text": "나. 담당 부서: ○○과"},
+    {"type": "empty"},
+    {"type": "paragraph", "text": "붙임  1. 세부 추진 일정 1부."},
+    {"type": "paragraph", "text": "      2. 소요 예산 내역 1부.  끝."}
+  ]
+}

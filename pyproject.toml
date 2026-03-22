@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hwpx-studio"
+version = "2.0.0"
+description = "한글(HWPX) 문서 생성·읽기·편집 라이브러리 — JSON DSL 기반, LLM 최적화"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "JH", email = "dhy00253@gmail.com"},
+]
+keywords = ["hwpx", "hancom", "hwp", "owpml", "korean", "document"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Office Suites",
+    "Topic :: Text Processing :: Markup :: XML",
+]
+dependencies = [
+    "lxml>=4.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/Victor-jh/hwpx-studio"
+Repository = "https://github.com/Victor-jh/hwpx-studio"
+Issues = "https://github.com/Victor-jh/hwpx-studio/issues"
+
+[project.scripts]
+hwpx-create = "hwpx_studio.create_document:main"
+hwpx-read = "hwpx_studio.read_document:main"
+hwpx-edit = "hwpx_studio.edit_document:main"
+hwpx-validate = "hwpx_studio.validate:main"
+hwpx-build = "hwpx_studio.build_hwpx:main"
+hwpx-section = "hwpx_studio.section_builder:main"
+hwpx-analyze = "hwpx_studio.analyze_template:main"
+hwpx-extract = "hwpx_studio.text_extract:main"
+hwpx-diff = "hwpx_studio.diff_docs:main"
+hwpx-guard = "hwpx_studio.page_guard:main"
+hwpx-pack = "hwpx_studio.office.pack:main"
+hwpx-unpack = "hwpx_studio.office.unpack:main"
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+hwpx_studio = ["templates/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src/hwpx_studio"]
