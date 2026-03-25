@@ -190,7 +190,7 @@ class TestRead:
         })
         assert "ERROR" in result
 
-    @pytest.fixture(params=sorted((ROOT).glob("*.hwpx"))[:5])
+    @pytest.fixture(params=sorted((ROOT / "test_outputs" / "hwpx").glob("*.hwpx"))[:5])
     def sample_hwpx(self, request):
         return request.param
 

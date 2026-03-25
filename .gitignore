@@ -14,5 +14,13 @@ setup_cowork.sh
 # Git 패치
 *.patch
 
+# 테스트 산출물
+test_outputs/
+*.html
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+pytest-cache-files-*/
+
 # OS
 .DS_Store

@@ -14,7 +14,7 @@ SRC_DIR = Path(__file__).resolve().parent.parent / "src" / "hwpx_studio"
 READ_CMD = [sys.executable, str(SRC_DIR / "read_document.py")]
 SKILL_DIR = Path(__file__).resolve().parent.parent
 
-SAMPLE_FILES = sorted(SKILL_DIR.glob("*.hwpx"))
+SAMPLE_FILES = sorted((SKILL_DIR / "test_outputs" / "hwpx").glob("*.hwpx"))
 
 
 # ── 기존 샘플 파일 전수 읽기 ──────────────────────────────────────

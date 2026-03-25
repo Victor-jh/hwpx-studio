@@ -10,7 +10,7 @@ import pytest
 from validate import validate
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-SAMPLE_FILES = sorted(SKILL_DIR.glob("*.hwpx"))
+SAMPLE_FILES = sorted((SKILL_DIR / "test_outputs" / "hwpx").glob("*.hwpx"))
 
 
 # ── 기존 샘플 파일 전수 검증 ──────────────────────────────────────

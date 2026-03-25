@@ -126,7 +126,7 @@ class TestKCUPPreview:
 class TestExistingFiles:
     """기존 HWPX 샘플 파일 미리보기 변환."""
 
-    @pytest.fixture(params=sorted(ROOT.glob("*.hwpx")))
+    @pytest.fixture(params=sorted((ROOT / "test_outputs" / "hwpx").glob("*.hwpx")))
     def hwpx_file(self, request):
         return request.param
 
