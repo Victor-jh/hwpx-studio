@@ -1,0 +1,42 @@
+{
+  "_meta": {
+    "name": "회의결과",
+    "description": "회의 결과 정리. 회의개요-안건별 결론-변경점-후속조치 구조"
+  },
+  "auto_spacing": true,
+  "content": [
+    {"type": "empty"},
+    {"type": "heading", "text": "{{회의 제목}} 결과", "level": 1, "charPr": "cover_title"},
+    {"type": "empty"},
+    {"type": "heading", "text": "{{날짜}}", "level": 2, "charPr": "body"},
+    {"type": "empty"},
+    {"type": "empty"},
+
+    {"type": "kcup_box", "title": "회의 개요"},
+    {"type": "kcup_o", "keyword": "일시", "text": "{{일시}}"},
+    {"type": "kcup_o", "keyword": "참석", "text": "{{참석자}}"},
+    {"type": "kcup_o", "keyword": "안건", "text": "{{안건 목록 요약}}"},
+
+    {"type": "kcup_numbered", "num": 1, "text": "{{안건 1 제목}}"},
+    {"type": "kcup_o", "keyword": "결론", "text": "{{안건 1 결론}}"},
+    {"type": "kcup_o", "keyword": "논의 경과", "text": "{{논의 요약}}"},
+    {"type": "kcup_dash", "keyword": "{{측 의견}}", "text": "{{의견 내용}}"},
+    {"type": "kcup_dash", "keyword": "{{측 수용}}", "text": "{{수용 내용}}"},
+
+    {"type": "kcup_numbered", "num": 2, "text": "{{안건 2 제목}}"},
+    {"type": "kcup_o", "keyword": "결론", "text": "{{안건 2 결론}}"},
+    {"type": "kcup_dash", "keyword": "{{항목}}", "text": "{{세부 내용}}"},
+
+    {"type": "kcup_box", "title": "기존 안 대비 변경점"},
+    {"type": "kcup_o", "keyword": "{{변경 항목}}", "text": "기존: {{기존}} → 변경: {{변경}}"},
+
+    {"type": "kcup_box", "title": "후속 조치"},
+    {"type": "kcup_o", "keyword": "{{조치 항목}}", "text": "{{담당}} / {{기한}}"},
+
+    {"type": "empty"},
+    {"type": "text", "text": "— 끝 —"},
+    {"type": "empty"},
+    {"type": "empty"},
+    {"type": "signature", "date": "{{날짜}}", "org": "방송통신이용자보호협회", "author": "{{부서 이름}}"}
+  ]
+}

@@ -82,6 +82,8 @@ def main():
                         help="secPr 복사용 base section0.xml 경로")
     parser.add_argument("--title", help="문서 제목 메타데이터")
     parser.add_argument("--creator", help="작성자 메타데이터")
+    parser.add_argument("--header",
+                        help="KCUP header 매핑 이름 (cost, ref3, mtg2)")
     parser.add_argument("--no-validate", action="store_true",
                         help="validate 단계 스킵")
     args = parser.parse_args()
@@ -136,6 +138,8 @@ def _run_single_section(json_path, output_path, template_name,
         sb_cmd += ["-t", template_name]
     if base_section:
         sb_cmd += ["--base-section", str(base_section)]
+    if args.header:
+        sb_cmd += ["--header", args.header]
 
     run_step(sb_cmd, "section_builder")
 
@@ -198,6 +202,8 @@ def _run_multi_section(json_path, output_path, template_name,
             sb_cmd += ["-t", template_name]
         if base_section:
             sb_cmd += ["--base-section", str(base_section)]
+        if args.header:
+            sb_cmd += ["--header", args.header]
 
         run_step(sb_cmd, "section_builder (multi)")
 

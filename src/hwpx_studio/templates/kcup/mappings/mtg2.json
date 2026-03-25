@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "name": "회의록 (mtg2_header)",
+    "source": "KCUP_이용자_참여_신고제_개발사_협의_260317.hwpx",
+    "usage": "회의자료, 회의결과",
+    "version": "1.0",
+    "date": "2026-03-25"
+  },
+  "charPr": {
+    "cover_title": 9,
+    "body": 50,
+    "bold": 53,
+    "box": 1,
+    "gap14": 54,
+    "gap14_alt": 54,
+    "gap10": 50,
+    "bracket": 52
+  },
+  "paraPr": {
+    "o": 74,
+    "box": 68,
+    "dash": 70,
+    "gap": 71
+  }
+}

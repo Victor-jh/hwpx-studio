@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "name": "회의자료",
+    "description": "회의 준비를 위한 개요-안건-기타 구조. 번호소제목(󰊱~)으로 안건 구분"
+  },
+  "auto_spacing": true,
+  "content": [
+    {"type": "empty"},
+    {"type": "heading", "text": "{{회의 제목}}", "level": 1, "charPr": "cover_title"},
+    {"type": "empty"},
+    {"type": "heading", "text": "{{날짜}}", "level": 2, "charPr": "body"},
+    {"type": "empty"},
+    {"type": "empty"},
+
+    {"type": "kcup_box", "title": "개요"},
+    {"type": "kcup_o", "keyword": "일시", "text": "{{일시}}"},
+    {"type": "kcup_o", "keyword": "장소", "text": "{{장소}}"},
+    {"type": "kcup_o", "keyword": "참석자", "text": "{{참석자}}"},
+    {"type": "kcup_o", "keyword": "주요내용", "text": "{{안건 요약}}"},
+    {"type": "kcup_dash", "text": "{{안건 1 요약}}"},
+    {"type": "kcup_dash", "text": "{{안건 2 요약}}"},
+
+    {"type": "kcup_numbered", "num": 1, "text": "{{안건 1 제목}}"},
+    {"type": "kcup_o", "keyword": "배경", "text": "{{안건 1 배경}}"},
+    {"type": "kcup_o", "keyword": "협의", "text": "{{안건 1 협의 내용}}"},
+    {"type": "kcup_dash", "keyword": "{{방안}}", "text": "{{세부 방안}}"},
+
+    {"type": "kcup_numbered", "num": 2, "text": "{{안건 2 제목}}"},
+    {"type": "kcup_o", "keyword": "배경", "text": "{{안건 2 배경}}"},
+    {"type": "kcup_dash", "keyword": "{{항목}}", "text": "{{세부 내용}}"},
+
+    {"type": "kcup_box", "title": "기타 사항"},
+    {"type": "kcup_o", "text": "{{추가 논의 사항}}"},
+
+    {"type": "kcup_attachment", "title": "{{붙임 제목}}"},
+
+    {"type": "empty"},
+    {"type": "text", "text": "— 끝 —"},
+    {"type": "empty"},
+    {"type": "empty"},
+    {"type": "signature", "date": "{{날짜}}", "org": "방송통신이용자보호협회", "author": "{{부서 이름}}"}
+  ]
+}

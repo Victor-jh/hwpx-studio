@@ -2,9 +2,9 @@
   "auto_spacing": true,
   "content": [
     {"type": "empty"},
-    {"type": "heading", "text": "이용자참여 신고제 운영 현황 보고서", "level": 1, "charPr": 15, "paraPr": 20},
+    {"type": "heading", "text": "이용자참여 신고제 운영 현황 보고서", "level": 1, "charPr": "cover_title", "paraPr": 20},
     {"type": "empty"},
-    {"type": "heading", "text": "2026. 03. 21.", "level": 2, "charPr": 16, "paraPr": 20},
+    {"type": "heading", "text": "2026. 03. 21.", "level": 2, "charPr": "body", "paraPr": 20},
     {"type": "empty"},
     {"type": "empty"},
 

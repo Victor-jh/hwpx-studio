@@ -1,0 +1,44 @@
+{
+  "_meta": {
+    "name": "계획문서",
+    "description": "추진배경-현황-세부방안(번호)-향후계획 구조"
+  },
+  "auto_spacing": true,
+  "content": [
+    {"type": "empty"},
+    {"type": "heading", "text": "{{계획 제목}}", "level": 1, "charPr": "cover_title"},
+    {"type": "empty"},
+    {"type": "heading", "text": "{{날짜}}", "level": 2, "charPr": "body"},
+    {"type": "empty"},
+    {"type": "empty"},
+
+    {"type": "kcup_box", "title": "추진 배경"},
+    {"type": "kcup_o", "keyword": "{{맥락1}}", "text": "{{배경 설명 1}}"},
+    {"type": "kcup_o", "keyword": "{{맥락2}}", "text": "{{배경 설명 2}}"},
+
+    {"type": "kcup_box", "title": "현황 및 문제점"},
+    {"type": "kcup_o", "keyword": "운영 현황", "text": "{{현황 설명}}"},
+    {"type": "kcup_dash", "text": "{{세부 현황}}"},
+    {"type": "kcup_o", "keyword": "문제점", "text": "{{문제점 설명}}"},
+    {"type": "kcup_dash", "text": "{{세부 문제점}}"},
+
+    {"type": "kcup_box", "title": "세부 방안"},
+    {"type": "kcup_numbered", "num": 1, "text": "{{방안 1 제목}}"},
+    {"type": "kcup_dash", "text": "{{방안 1 세부}}"},
+    {"type": "kcup_numbered", "num": 2, "text": "{{방안 2 제목}}"},
+    {"type": "kcup_dash", "text": "{{방안 2 세부}}"},
+    {"type": "kcup_numbered", "num": 3, "text": "{{방안 3 제목}}"},
+    {"type": "kcup_dash", "text": "{{방안 3 세부}}"},
+
+    {"type": "kcup_box", "title": "향후 계획"},
+    {"type": "kcup_o", "keyword": "추진 순서", "text": "{{순서 설명}}"},
+    {"type": "kcup_dash", "text": "{{세부 일정}}"},
+    {"type": "kcup_o", "keyword": "우선순위", "text": "{{우선순위 설명}}"},
+
+    {"type": "empty"},
+    {"type": "text", "text": "— 끝 —"},
+    {"type": "empty"},
+    {"type": "empty"},
+    {"type": "signature", "date": "{{날짜}}", "org": "방송통신이용자보호협회", "author": "{{부서 이름}}"}
+  ]
+}

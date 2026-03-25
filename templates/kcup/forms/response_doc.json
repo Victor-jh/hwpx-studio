@@ -1,0 +1,40 @@
+{
+  "_meta": {
+    "name": "대응자료",
+    "description": "외부 또는 내부 대응을 위한 배경-주요내용-세부현황 구조",
+    "variant_notes": "내부용: 서두 생략, 조치사항 □ 추가 / 외부용: 서두 문의 답변, 마무리 인사"
+  },
+  "auto_spacing": true,
+  "content": [
+    {"type": "empty"},
+    {"type": "heading", "text": "{{제목}}", "level": 1, "charPr": "cover_title"},
+    {"type": "empty"},
+    {"type": "heading", "text": "{{날짜}}", "level": 2, "charPr": "body"},
+    {"type": "empty"},
+    {"type": "empty"},
+
+    {"type": "kcup_box", "title": "배경"},
+    {"type": "kcup_o", "text": "{{배경 서술 — 단순 서술이면 keyword 생략}}"},
+
+    {"type": "kcup_box", "title": "주요 내용"},
+    {"type": "kcup_o", "keyword": "{{키워드1}}", "text": "{{핵심 메시지 1}}"},
+    {"type": "kcup_o", "keyword": "{{키워드2}}", "text": "{{핵심 메시지 2}}"},
+    {"type": "kcup_o", "keyword": "{{키워드3}}", "text": "{{핵심 메시지 3}}"},
+    {"type": "kcup_dash", "keyword": "{{세부1}}", "text": "{{세부 설명}}"},
+
+    {"type": "kcup_box", "title": "세부현황"},
+    {"type": "kcup_o_heading", "title": "{{소제목 1}}"},
+    {"type": "kcup_dash", "keyword": "{{항목}}", "text": "{{상세 내용}}"},
+    {"type": "kcup_dash", "keyword": "{{항목}}", "text": "{{상세 내용}}"},
+    {"type": "kcup_o_heading", "title": "{{소제목 2}}"},
+    {"type": "kcup_dash", "keyword": "{{항목}}", "text": "{{상세 내용}}"},
+
+    {"type": "kcup_attachment", "title": "{{붙임 제목}}"},
+
+    {"type": "empty"},
+    {"type": "text", "text": "— 끝 —"},
+    {"type": "empty"},
+    {"type": "empty"},
+    {"type": "signature", "date": "{{날짜}}", "org": "방송통신이용자보호협회", "author": "{{부서 이름}}"}
+  ]
+}

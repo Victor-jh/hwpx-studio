@@ -1,0 +1,40 @@
+{
+  "_meta": {
+    "name": "통화/접촉 보고",
+    "description": "배경-통화개요-주요내용(번호)-조치사항 구조"
+  },
+  "auto_spacing": true,
+  "content": [
+    {"type": "empty"},
+    {"type": "heading", "text": "{{보고 제목}}", "level": 1, "charPr": "cover_title"},
+    {"type": "empty"},
+    {"type": "heading", "text": "{{날짜}}", "level": 2, "charPr": "body"},
+    {"type": "empty"},
+    {"type": "empty"},
+
+    {"type": "kcup_box", "title": "배경"},
+    {"type": "kcup_o", "text": "{{배경 단순 서술}}"},
+
+    {"type": "kcup_box", "title": "통화 개요"},
+    {"type": "kcup_o", "keyword": "일시", "text": "{{통화 일시}}"},
+    {"type": "kcup_o", "keyword": "상대", "text": "{{통화 상대방}}"},
+    {"type": "kcup_o", "keyword": "방식", "text": "{{유선/대면/화상 등}}"},
+    {"type": "kcup_o", "keyword": "건수", "text": "{{건수}}"},
+
+    {"type": "kcup_box", "title": "주요 내용"},
+    {"type": "kcup_numbered", "num": 1, "text": "{{주요 내용 1 제목}}"},
+    {"type": "kcup_dash", "keyword": "현황", "text": "{{현황 설명}}"},
+    {"type": "kcup_dash", "keyword": "문의 내용", "text": "{{문의 내용}}"},
+    {"type": "kcup_numbered", "num": 2, "text": "{{주요 내용 2 제목}}"},
+    {"type": "kcup_dash", "text": "{{세부 내용}}"},
+
+    {"type": "kcup_box", "title": "조치사항"},
+    {"type": "kcup_o", "keyword": "{{조치 항목}}", "text": "{{대응 방향}}"},
+
+    {"type": "empty"},
+    {"type": "text", "text": "— 끝 —"},
+    {"type": "empty"},
+    {"type": "empty"},
+    {"type": "signature", "date": "{{날짜}}", "org": "방송통신이용자보호협회", "author": "{{부서 이름}}"}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "_meta": {
+    "name": "활성화계획 (ref3_header)",
+    "source": "260316_-__26년_이용자_참여_신고제_활성화_계획_안_.hwpx",
+    "usage": "계획문서, 비용안내, 통화보고, 워크숍 등",
+    "version": "1.0",
+    "date": "2026-03-25"
+  },
+  "charPr": {
+    "cover_title": 15,
+    "body": 16,
+    "bold": 17,
+    "box": 18,
+    "gap14": 21,
+    "gap14_alt": 21,
+    "gap10": 21,
+    "bracket": 22,
+    "cover_logo": 12,
+    "cover_line": 13,
+    "cover_date": 20
+  },
+  "paraPr": {
+    "o": 27,
+    "box": 29,
+    "dash": 31,
+    "gap": 32
+  }
+}
