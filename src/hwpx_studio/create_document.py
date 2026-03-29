@@ -101,8 +101,10 @@ def main():
         json_data = json.load(f)
     if not template_name:
         json_template = json_data.get("template")
-        if json_template and json_template != "base":
+        if json_template:
             template_name = json_template
+        else:
+            template_name = "base"
 
     # base section 결정
     base_section = None

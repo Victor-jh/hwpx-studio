@@ -68,19 +68,17 @@ BODY_WIDTH_MAP = {
 DEFAULT_ROW_HEIGHT = 2800
 DEFAULT_CELL_MARGIN = 113  # 약 0.4mm
 
-# report 템플릿 기준 기본 스타일 매핑
-HEADING_STYLES = {
-    1: {"charPr": 7, "paraPr": 20},   # 20pt 볼드 CENTER
-    2: {"charPr": 8, "paraPr": 0},    # 14pt 볼드
-    3: {"charPr": 13, "paraPr": 27},  # 12pt 볼드 돋움 섹션헤더
+# 기본 heading/numbered 스타일 — PropertyRegistry를 통해 동적 ID로 할당됨
+HEADING_DEFAULTS = {
+    1: {"charPr": {"size": 20, "bold": True}, "paraPr": {"align": "CENTER"}},
+    2: {"charPr": {"size": 14, "bold": True}, "paraPr": {}},
+    3: {"charPr": {"size": 12, "bold": True}, "paraPr": {}},
 }
 
-NUMBERED_STYLES = {
-    "circle":  {"paraPr": 24, "charPr": 0},   # □ left600
-    "dot":     {"paraPr": 25, "charPr": 0},    # ① left1200
-    "kcup":    {"paraPr": 24, "charPr": 0},    # KCUP 스타일
-    "roman":   {"paraPr": 24, "charPr": 0},    # 로마 숫자
-    "dash":    {"paraPr": 26, "charPr": 0},    # - left1800
+NUMBERED_DEFAULTS = {
+    "circle": {"paraPr": {"left": 600},  "charPr": 0},
+    "dot":    {"paraPr": {"left": 1200}, "charPr": 0},
+    "dash":   {"paraPr": {"left": 1800}, "charPr": 0},
 }
 
 ROMAN = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ", "Ⅵ", "Ⅶ", "Ⅷ", "Ⅸ", "Ⅹ"]
@@ -2195,20 +2193,24 @@ def _resolve_cp(item, default, registry):
     """item["charPr"]를 해석: int→그대로, str→KCUP_CP 역할명 조회, dict→registry."""
     val = item.get("charPr", default)
     if isinstance(val, str):
-        return KCUP_CP.get(val, default)
-    if registry and isinstance(val, dict):
-        return registry.resolve_charPr(val)
-    return val if isinstance(val, int) else default
+        return KCUP_CP.get(val, 0)
+    if isinstance(val, dict):
+        if registry:
+            return registry.resolve_charPr(val)
+        return 0  # registry=None 폴백
+    return val if isinstance(val, int) else 0
 
 
 def _resolve_pp(item, default, registry):
     """item["paraPr"]를 해석: int→그대로, str→KCUP_PP 역할명 조회, dict→registry."""
     val = item.get("paraPr", default)
     if isinstance(val, str):
-        return KCUP_PP.get(val, default)
-    if registry and isinstance(val, dict):
-        return registry.resolve_paraPr(val)
-    return val if isinstance(val, int) else default
+        return KCUP_PP.get(val, 0)
+    if isinstance(val, dict):
+        if registry:
+            return registry.resolve_paraPr(val)
+        return 0  # registry=None 폴백
+    return val if isinstance(val, int) else 0
 
 
 def _resolve_bf(item, key, default, registry):
@@ -2284,9 +2286,9 @@ def build_section(json_data, base_section_path=None, template=None,
 
         elif item_type == "heading":
             level = item.get("level", 1)
-            style = HEADING_STYLES.get(level, HEADING_STYLES[1])
-            cp = _resolve_cp(item, style["charPr"], registry)
-            pp = _resolve_pp(item, style["paraPr"], registry)
+            dflt = HEADING_DEFAULTS.get(level, HEADING_DEFAULTS[1])
+            cp = _resolve_cp(item, dflt["charPr"], registry)
+            pp = _resolve_pp(item, dflt["paraPr"], registry)
             sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
                                        text=item.get("text", "")))
 
@@ -2320,7 +2322,7 @@ def build_section(json_data, base_section_path=None, template=None,
                 prefix = f"{num}."
 
             full_text = f"{prefix} {text}"
-            ns = NUMBERED_STYLES.get(style, NUMBERED_STYLES["circle"])
+            ns = NUMBERED_DEFAULTS.get(style, NUMBERED_DEFAULTS["circle"])
             pp = _resolve_pp(item, ns["paraPr"], registry)
             cp = _resolve_cp(item, ns["charPr"], registry)
             runs = build_runs_with_registry(item, registry)
@@ -2576,9 +2578,9 @@ def _build_item(idgen, item, body_width, template, registry=None):
 
     elif item_type == "heading":
         level = item.get("level", 1)
-        style = HEADING_STYLES.get(level, HEADING_STYLES[1])
-        cp = item.get("charPr", style["charPr"])
-        pp = item.get("paraPr", style["paraPr"])
+        dflt = HEADING_DEFAULTS.get(level, HEADING_DEFAULTS[1])
+        cp = item.get("charPr", dflt["charPr"])
+        pp = item.get("paraPr", dflt["paraPr"])
         elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
                                         text=item.get("text", "")))
 
@@ -2610,7 +2612,7 @@ def _build_item(idgen, item, body_width, template, registry=None):
         else:
             prefix = f"{num}."
         full_text = f"{prefix} {text}"
-        ns = NUMBERED_STYLES.get(style, NUMBERED_STYLES["circle"])
+        ns = NUMBERED_DEFAULTS.get(style, NUMBERED_DEFAULTS["circle"])
         pp = item.get("paraPr", ns["paraPr"])
         cp = item.get("charPr", ns["charPr"])
         runs = build_runs(item)
