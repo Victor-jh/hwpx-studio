@@ -225,6 +225,53 @@ source "$SKILL_DIR/.venv/bin/activate"   # lxml 필요
 
 ---
 
+## 테마 시스템 (신규)
+
+문서 스타일을 테마(기호체계+서식+작성스타일) + 양식(골격) + 컨텍스트(조직정보)로
+분리하여 관리. hwpx_create의 style_overrides 파라미터로 테마 서식을 동적 적용.
+
+### 추가 MCP 도구
+
+| 도구 | 설명 |
+|------|------|
+| `hwpx_create(style_overrides=...)` | 테마 서식 오버라이드 (charPr/paraPr dict) |
+| `hwpx_read(resolve_styles=True)` | charPr/paraPr ID → 실제 속성값 반환 |
+| `hwpx_theme_list` | 등록된 테마/양식/컨텍스트 목록 |
+| `hwpx_theme_get` | 특정 테마 내용 조회 |
+| `hwpx_theme_save` | 테마 생성/수정 |
+| `hwpx_theme_delete` | 테마 삭제 |
+
+### 추가 스킬
+
+| 스킬 | 설명 |
+|------|------|
+| `skills/theme-manager/` | 테마 CRUD |
+| `skills/template-manager/` | 양식 CRUD |
+| `skills/style-writer/` | 테마+양식 조합 → 문서 생성 |
+| `skills/style-analyzer/` | 외부 문서 → 테마/양식 자동 추출 |
+
+### 추가 커맨드
+
+| 커맨드 | 설명 |
+|--------|------|
+| `/write` | 테마 기반 문서 작성 |
+| `/new-theme` | 새 테마 생성 |
+| `/edit-theme` | 기존 테마 수정 |
+| `/list-themes` | 테마/양식/컨텍스트 목록 |
+| `/new-template` | 새 양식 생성 |
+| `/analyze-style` | 문서 스타일 분석 |
+| `/restyle` | 기존 문서에 다른 테마 적용 |
+
+### 데이터 저장 위치
+
+| 디렉터리 | 내용 |
+|----------|------|
+| `themes/` | 테마 yaml (기호+서식+작성스타일) |
+| `document-templates/` | 양식 yaml (문서 골격) |
+| `contexts/` | 조직정보 yaml |
+
+---
+
 ## 참조 파일 인덱스
 
 | 파일 | 내용 |

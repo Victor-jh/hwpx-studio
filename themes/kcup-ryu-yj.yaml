@@ -1,0 +1,51 @@
+theme:
+  id: "kcup-ryu-yj"
+  name: "KCUP 류지윤 스타일"
+  version: "1.0"
+  created: "2026-04-08"
+
+  # Layer 1a — 기호 체계
+  markers:
+    system: "kcup"
+    L1: { marker: "□", role: "섹션 제목", numberedAlt: "□ {n}" }
+    L2: { marker: "○", role: "주항목", numberedAlt: "①②③" }
+    L3: { marker: "–", role: "세부항목" }
+    L4: { marker: "·", role: "하위항목" }
+    note: { marker: "※" }
+    pointer: { marker: "☞" }
+
+  # Layer 1b — 시각 서식
+  format:
+    page: { size: "A4", margin: { top: 15, bottom: 15, left: 20, right: 20 } }
+    levels:
+      L1: { font: "함초롬바탕", size: 14, bold: true,  indent: 0, lineHeight: 160 }
+      L2: { font: "함초롬바탕", size: 14, bold: false, indent: 3, lineHeight: 160 }
+      L3: { font: "함초롬바탕", size: 14, bold: false, indent: 6, lineHeight: 160 }
+      L4: { font: "함초롬바탕", size: 14, bold: false, indent: 9, lineHeight: 160 }
+      note: { font: "함초롬바탕", size: 14, bold: false, indent: 6, lineHeight: 100 }
+    spacing:
+      L1: { size: 14, lineHeight: 160 }   # 높이 22.4pt
+      L2: { size: 10, lineHeight: 100 }   # 높이 10pt
+      L3: { size: 6,  lineHeight: 100 }   # 높이 6pt
+      note: null
+    table:
+      header: { font: "함초롬바탕", size: 12, bold: true, align: center, bgColor: "D6E4F0" }
+      data:   { font: "함초롬바탕", size: 12, bold: false, align: left }
+      border: { style: solid, width: 0.5, color: "999999" }
+      cellPadding: { top: 2, bottom: 2, left: 3, right: 3 }
+
+  # Layer 3 — 작성 스타일
+  writing:
+    parentheses:
+      L2: "보통 사용. (키워드) + 서술. 단순 나열 시 괄호 생략 가능"
+      L3: "기본 미사용. 구분 필요 시만 (키워드) 사용"
+    keyword_spacing: "2~3글자는 공백으로 벌림 (예: 배  경, 현  황)"
+    keyword_bold: true
+    numbered_substitute:
+      L1: "섹션 4개 이상 시 □ {n} 또는 네모숫자"
+      L2: "항목 5개 이상 시 ①②③ 대체 가능"
+    note_placement: "인라인(Shift+Enter) 우선, 폴백으로 독립 문단"
+    pointer_usage: "문단 흐름 밖 주의 환기 시"
+    post_adjustment: "보고 후 ±1~2pt 미세조정 허용. 기호 계층 구조는 변경 금지"
+    conflict_resolution:
+      external_format: "기호+서식+양식은 외부 우선, 작성스타일은 내부 유지, 충돌 시 외부 관행 우선"

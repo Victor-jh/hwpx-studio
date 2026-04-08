@@ -1,0 +1,28 @@
+template:
+  id: "meeting-material"
+  name: "회의 자료"
+  description: "내부 회의 보고자료, 위원회 안건 자료"
+  kcup_header: "ref3"
+
+  structure:
+    - block: "cover"
+      required: true
+    - block: "section"
+      default_title: "안건 개요"
+      contains: [text]
+      guidance: "배경, 목적, 기대효과 서술"
+    - block: "section"
+      default_title: "세부 내용"
+      contains: [text, table, image]
+      repeat: true
+      guidance: "추진경과, 프로세스 플로우, 데이터 표"
+    - block: "section"
+      default_title: "향후 계획"
+      contains: [text]
+      guidance: "일정, 예산, 담당자"
+    - block: "attachment"
+      position: "end"
+      required: false
+      guidance: "붙임 문서, 참고자료 목록"
+
+  file_naming: "YYMMDD {사업명} - {제목} v{X.X}.hwpx"

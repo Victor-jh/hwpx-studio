@@ -1,0 +1,34 @@
+template:
+  id: "proposal"
+  name: "제안서/기획안"
+  description: "사업 제안서, 기획안, 추진계획"
+  kcup_header: "cost"
+
+  structure:
+    - block: "cover"
+      required: true
+    - block: "section"
+      default_title: "추진 배경"
+      contains: [text]
+      guidance: "현황, 문제점, 필요성"
+    - block: "section"
+      default_title: "추진 목표"
+      contains: [text]
+      guidance: "목표, 기대효과, 성과지표"
+    - block: "section"
+      default_title: "세부 추진 계획"
+      contains: [text, table]
+      repeat: true
+      guidance: "단계별 추진 내용, 일정, 예산"
+    - block: "section"
+      default_title: "소요 예산"
+      contains: [table]
+      guidance: "항목별 예산 내역"
+    - block: "section"
+      default_title: "기대 효과"
+      contains: [text]
+    - block: "note"
+      position: "end"
+      required: false
+
+  file_naming: "YYMMDD {사업명} - {제목} v{X.X}.hwpx"

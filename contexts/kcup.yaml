@@ -1,0 +1,11 @@
+context:
+  id: "kcup"
+  name: "(사)방송통신이용자보호협회"
+  short: "KCUP"
+  english: "Korea Communications Users Protection"
+  color: "#1F4E79"
+  domain: "uservoice.or.kr"
+  team: "이용자보호팀"
+  department: "이용자보호부"
+  address: "서울시 중구"
+  established: "2012"

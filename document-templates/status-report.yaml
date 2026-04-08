@@ -1,0 +1,27 @@
+template:
+  id: "status-report"
+  name: "현황 보고서"
+  description: "주간/월간 현황 보고, 위반현황 통계 리포트"
+  kcup_header: "ref3"
+
+  structure:
+    - block: "cover"
+      required: true
+    - block: "section"
+      default_title: "전체 현황 요약"
+      contains: [text]
+      guidance: "L2에서 주요 수치 요약, L3에서 상태별/판정별 분포"
+    - block: "section"
+      default_title: "세부 분석"
+      contains: [text, table]
+      repeat: true
+      guidance: "분석 축마다 섹션 분리 가능"
+    - block: "section"
+      default_title: "후속 조치"
+      contains: [text]
+      guidance: "파이프라인 현황 + 액션 아이템"
+    - block: "note"
+      position: "end"
+      required: false
+
+  file_naming: "YYMMDD {사업명} - {제목} v{X.X}.hwpx"
