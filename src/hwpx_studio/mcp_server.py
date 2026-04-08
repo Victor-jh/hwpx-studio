@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -23,14 +24,22 @@ from mcp.server.fastmcp import FastMCP
 try:
     from hwpx_studio.build_hwpx import build as build_hwpx
     from hwpx_studio.edit_document import HWPXEditor
+    from hwpx_studio.property_registry import PropertyRegistry
     from hwpx_studio.read_document import HWPXReader
-    from hwpx_studio.section_builder import build_xml, reset_image_registry
+    from hwpx_studio.section_builder import (
+        build_xml, reset_image_registry,
+        apply_style_overrides, restore_kcup_mapping,
+    )
     from hwpx_studio.validate import validate
 except ImportError:
     from build_hwpx import build as build_hwpx
     from edit_document import HWPXEditor
+    from property_registry import PropertyRegistry
     from read_document import HWPXReader
-    from section_builder import build_xml, reset_image_registry
+    from section_builder import (
+        build_xml, reset_image_registry,
+        apply_style_overrides, restore_kcup_mapping,
+    )
     from validate import validate
 
 # text_extract는 python-hwpx(hwpx) 의존성이 있어 선택적 임포트
@@ -67,6 +76,7 @@ def hwpx_create(
     json_dsl: str,
     output_path: str,
     style: str = "report",
+    style_overrides: str = "",
 ) -> str:
     """JSON DSL로 HWPX(한글) 문서를 생성합니다.
 
@@ -74,6 +84,16 @@ def hwpx_create(
         json_dsl: JSON 문자열. 아래 예시 참고.
         output_path: 생성할 HWPX 파일 경로 (예: /tmp/output.hwpx)
         style: 템플릿 — report(보고서), gonmun(공문서), kcup, minutes(회의록), proposal(제안서)
+        style_overrides: (선택) 테마 서식 오버라이드 JSON 문자열. KCUP 블록의
+            charPr/paraPr을 역할명 기반으로 덮어쓸 수 있습니다.
+            예시: {"charPr": {"box": {"size": 14, "bold": true, "font": "함초롬바탕"},
+                              "body": {"size": 14}, "bold": {"size": 14, "bold": true},
+                              "gap14": {"size": 14}, "gap10": {"size": 10},
+                              "gap6": {"size": 6}},
+                   "paraPr": {"box": {"lineSpacing": 160, "indent": 0},
+                              "o": {"lineSpacing": 160, "indent": 300},
+                              "dash": {"lineSpacing": 160, "indent": 600},
+                              "gap": {"lineSpacing": 100}}}
 
     예시 1 — 기본 보고서:
         {"blocks": [
@@ -100,12 +120,31 @@ def hwpx_create(
     except json.JSONDecodeError as e:
         return f"ERROR: JSON 파싱 실패 — {e}"
 
+    # style_overrides 파싱
+    overrides = {}
+    if style_overrides:
+        try:
+            overrides = json.loads(style_overrides)
+        except json.JSONDecodeError as e:
+            return f"ERROR: style_overrides JSON 파싱 실패 — {e}"
+
     try:
         reset_image_registry()
         out = Path(output_path)
         out.parent.mkdir(parents=True, exist_ok=True)
 
         templates_dir = _resolve_template_dir()
+
+        # ★ PropertyRegistry 생성 — header.xml에서 기존 최대 ID 파악
+        header_xml = templates_dir / style / "header.xml"
+        if header_xml.exists():
+            registry = PropertyRegistry(str(header_xml))
+        else:
+            registry = PropertyRegistry()
+
+        # ★ style_overrides → KCUP_CP/KCUP_PP 동적 덮어쓰기 (방법 C)
+        if overrides:
+            apply_style_overrides(overrides, registry)
 
         # section XML 생성
         with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as tmp:
@@ -115,10 +154,11 @@ def hwpx_create(
             base_section = templates_dir / style / "section0.xml"
             base = base_section if base_section.exists() else None
 
-            tree = build_xml(data, base_section_path=base, template=style)
+            tree = build_xml(data, base_section_path=base, template=style,
+                             registry=registry)
             tree.write(str(section_tmp), xml_declaration=True, encoding="UTF-8", pretty_print=True)
 
-            # HWPX 빌드
+            # HWPX 빌드 — registry를 전달하여 header.xml에 동적 엔트리 삽입
             build_hwpx(
                 template=style,
                 header_override=None,
@@ -126,16 +166,23 @@ def hwpx_create(
                 title=None,
                 creator=None,
                 output=out,
+                registry=registry,
             )
         finally:
             section_tmp.unlink(missing_ok=True)
+            # ★ KCUP 매핑 원래 값으로 복원 (다음 호출에 영향 방지)
+            if overrides:
+                restore_kcup_mapping()
 
         # 생성 후 검증
         errors = validate(str(out))
         if errors:
             return f"WARNING: 파일 생성됨 ({out}) 하지만 검증 경고:\n" + "\n".join(f"  - {e}" for e in errors)
-        return f"OK: {out} (style={style})"
+        return f"OK: {out} (style={style}, overrides={'applied' if overrides else 'none'})"
     except Exception as e:
+        # ★ 예외 시에도 복원
+        if overrides:
+            restore_kcup_mapping()
         return f"ERROR: 생성 실패 — {type(e).__name__}: {e}"
 
 
@@ -144,12 +191,16 @@ def hwpx_create(
 def hwpx_read(
     input_path: str,
     include_styles: bool = False,
+    resolve_styles: bool = False,
 ) -> str:
     """HWPX 문서를 읽어 JSON으로 변환합니다. 라운드트립 지원(JSON→HWPX→JSON 보존).
 
     Args:
         input_path: HWPX 파일 경로.
-        include_styles: True이면 charPr/paraPr 스타일 정보도 포함.
+        include_styles: True이면 charPr/paraPr 스타일 ID도 포함.
+        resolve_styles: True이면 charPr/paraPr ID를 실제 속성값(size_pt, font,
+            bold, lineSpacing 등)으로 풀어서 charPr_resolved/paraPr_resolved 키로 반환.
+            외부 문서의 서식을 정확히 분석할 때 사용.
 
     Returns:
         {"blocks": [{"type": "heading", "text": "..."}, ...]} 형태의 JSON.
@@ -162,7 +213,8 @@ def hwpx_read(
     try:
         reader = HWPXReader(str(path))
         reader.load()
-        result = reader.to_json(include_styles=include_styles)
+        result = reader.to_json(include_styles=include_styles,
+                                resolve_styles=resolve_styles)
         return json.dumps(result, ensure_ascii=False, indent=2)
     except Exception as e:
         return f"ERROR: 읽기 실패 — {type(e).__name__}: {e}"
@@ -332,6 +384,125 @@ def hwpx_preview(
         return f"OK: {out}"
     except Exception as e:
         return f"ERROR: 미리보기 생성 실패 — {type(e).__name__}: {e}"
+
+
+# ── Theme CRUD 도구 ──────────────────────────────────────────────
+
+def _themes_base_dir(themes_dir: str = "") -> Path:
+    """테마/양식/컨텍스트 저장 기본 경로 해결.
+
+    우선순위:
+      1. themes_dir 파라미터 명시 → 해당 경로
+      2. HWPX_THEMES_DIR 환경변수 → 해당 경로
+      3. ~/.hwpx-studio/ (사용자 홈, 세션 간 영속)
+    """
+    if themes_dir:
+        return Path(themes_dir)
+    env = os.environ.get("HWPX_THEMES_DIR")
+    if env:
+        return Path(env)
+    return Path.home() / ".hwpx-studio"
+
+
+@mcp.tool()
+def hwpx_theme_list(themes_dir: str = "") -> str:
+    """등록된 테마/양식/컨텍스트 목록을 반환합니다.
+
+    Args:
+        themes_dir: 테마 저장 루트 경로 (비어 있으면 ~/.hwpx-studio/).
+
+    Returns:
+        {"themes": [...], "templates": [...], "contexts": [...]} JSON.
+    """
+    base = _themes_base_dir(themes_dir)
+    result = {"themes": [], "templates": [], "contexts": []}
+    for category in ("themes", "templates", "contexts"):
+        d = base / category
+        if d.is_dir():
+            result[category] = sorted(
+                f.stem for f in d.iterdir()
+                if f.is_file() and f.suffix in (".yaml", ".yml", ".json")
+            )
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def hwpx_theme_get(name: str, category: str = "themes",
+                   themes_dir: str = "") -> str:
+    """특정 테마/양식/컨텍스트의 내용을 반환합니다.
+
+    Args:
+        name: 파일명 (확장자 없이). 예: "kcup-ryu-yj"
+        category: "themes", "templates", "contexts" 중 하나.
+        themes_dir: 테마 저장 루트 경로.
+
+    Returns:
+        YAML/JSON 파일 내용 문자열.
+    """
+    base = _themes_base_dir(themes_dir)
+    d = base / category
+    # yaml 우선, json 폴백
+    for ext in (".yaml", ".yml", ".json"):
+        p = d / f"{name}{ext}"
+        if p.exists():
+            return p.read_text(encoding="utf-8")
+    return f"ERROR: '{name}' not found in {d}"
+
+
+@mcp.tool()
+def hwpx_theme_save(name: str, content: str, category: str = "themes",
+                    themes_dir: str = "") -> str:
+    """테마/양식/컨텍스트를 저장(생성 또는 수정)합니다.
+
+    Args:
+        name: 파일명 (확장자 없이). 예: "kcup-ryu-yj"
+        content: YAML 또는 JSON 문자열.
+        category: "themes", "templates", "contexts" 중 하나.
+        themes_dir: 테마 저장 루트 경로.
+
+    Returns:
+        저장된 파일 경로.
+    """
+    base = _themes_base_dir(themes_dir)
+    d = base / category
+    d.mkdir(parents=True, exist_ok=True)
+
+    # 확장자 결정: JSON이면 .json, 아니면 .yaml
+    try:
+        json.loads(content)
+        ext = ".json"
+    except (json.JSONDecodeError, ValueError):
+        ext = ".yaml"
+
+    p = d / f"{name}{ext}"
+    p.write_text(content, encoding="utf-8")
+    return f"OK: saved {p}"
+
+
+@mcp.tool()
+def hwpx_theme_delete(name: str, category: str = "themes",
+                      themes_dir: str = "") -> str:
+    """테마/양식/컨텍스트를 삭제합니다.
+
+    Args:
+        name: 파일명 (확장자 없이).
+        category: "themes", "templates", "contexts" 중 하나.
+        themes_dir: 테마 저장 루트 경로.
+
+    Returns:
+        삭제 결과 메시지.
+    """
+    base = _themes_base_dir(themes_dir)
+    d = base / category
+    deleted = False
+    for ext in (".yaml", ".yml", ".json"):
+        p = d / f"{name}{ext}"
+        if p.exists():
+            p.unlink()
+            deleted = True
+    if deleted:
+        return f"OK: deleted '{name}' from {category}"
+    return f"ERROR: '{name}' not found in {d}"
 
 
 # ── 진입점 ────────────────────────────────────────────────────────

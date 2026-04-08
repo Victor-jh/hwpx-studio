@@ -1136,8 +1136,19 @@ class HWPXReader:
 
         return self
 
-    def to_json(self, include_styles: bool = False) -> dict:
-        """전체 문서를 JSON dict로 변환."""
+    def to_json(self, include_styles: bool = False,
+                resolve_styles: bool = False) -> dict:
+        """전체 문서를 JSON dict로 변환.
+
+        Args:
+            include_styles: True이면 charPr/paraPr ID를 블록에 포함.
+            resolve_styles: True이면 charPr/paraPr ID를 실제 속성값
+                (size, font, bold, lineSpacing 등)으로 풀어서 반환.
+                include_styles=True도 자동 활성화됨.
+        """
+        if resolve_styles:
+            include_styles = True
+
         result: dict[str, Any] = {}
 
         if self._meta:
@@ -1165,7 +1176,77 @@ class HWPXReader:
                 },
             }
 
+        # ★ resolve_styles: 각 블록의 charPr/paraPr ID를 실제 속성값으로 확장
+        if resolve_styles and self.style_registry:
+            blocks = result.get("blocks", [])
+            if not blocks:
+                for sec in result.get("sections", []):
+                    blocks.extend(sec.get("blocks", []))
+            self._resolve_block_styles(blocks)
+
         return result
+
+    def _resolve_block_styles(self, blocks: list[dict]) -> None:
+        """블록 리스트의 charPr/paraPr ID를 실제 속성값으로 확장."""
+        if not self.style_registry:
+            return
+        reg = self.style_registry
+
+        for block in blocks:
+            # charPr 해석
+            if "charPr" in block:
+                cid = block["charPr"]
+                if isinstance(cid, int):
+                    spec = reg.get_charPr_spec(cid)
+                    if spec:
+                        resolved = {}
+                        if "height" in spec:
+                            resolved["size_pt"] = spec["height"] / 100
+                        resolved["bold"] = spec.get("bold", False)
+                        resolved["italic"] = spec.get("italic", False)
+                        if "textColor" in spec:
+                            resolved["color"] = spec["textColor"]
+                        if "fontRef" in spec:
+                            font_name = reg.get_font_name(spec["fontRef"])
+                            if font_name:
+                                resolved["font"] = font_name
+                        if "underline" in spec and spec["underline"] != "NONE":
+                            resolved["underline"] = spec["underline"]
+                        block["charPr_resolved"] = resolved
+
+            # paraPr 해석
+            if "paraPr" in block:
+                pid = block["paraPr"]
+                if isinstance(pid, int):
+                    spec = reg.get_paraPr_spec(pid)
+                    if spec:
+                        resolved = {}
+                        if "align" in spec:
+                            resolved["align"] = spec["align"]
+                        if "lineSpacing" in spec:
+                            resolved["lineSpacing"] = spec["lineSpacing"]
+                            resolved["lineSpacingType"] = spec.get(
+                                "lineSpacingType", "PERCENT")
+                        if "margin" in spec:
+                            resolved["margin"] = spec["margin"]
+                        block["paraPr_resolved"] = resolved
+
+            # runs 내부도 해석
+            for run in block.get("runs", []):
+                if "charPr" in run:
+                    cid = run["charPr"]
+                    if isinstance(cid, int):
+                        spec = reg.get_charPr_spec(cid)
+                        if spec:
+                            resolved = {}
+                            if "height" in spec:
+                                resolved["size_pt"] = spec["height"] / 100
+                            resolved["bold"] = spec.get("bold", False)
+                            if "fontRef" in spec:
+                                font_name = reg.get_font_name(spec["fontRef"])
+                                if font_name:
+                                    resolved["font"] = font_name
+                            run["charPr_resolved"] = resolved
 
     def _parse_section(self, xml_bytes: bytes) -> dict:
         """단일 section XML → JSON dict."""

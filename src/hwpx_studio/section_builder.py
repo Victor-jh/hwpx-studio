@@ -122,6 +122,45 @@ def _init_kcup_mapping():
 
 KCUP_CP, KCUP_PP = _init_kcup_mapping()
 
+# 원본 KCUP 매핑 백업 (style_overrides 적용 후 복원에 사용)
+_KCUP_CP_ORIGINAL = dict(KCUP_CP)
+_KCUP_PP_ORIGINAL = dict(KCUP_PP)
+
+
+def apply_style_overrides(overrides: dict, registry) -> None:
+    """style_overrides dict를 기반으로 KCUP_CP/KCUP_PP 모듈 전역을 동적 덮어쓰기.
+
+    방법 C: 템플릿 XML의 charPr/paraPr을 PropertyRegistry를 통해 동적 생성하고,
+    결과 ID로 KCUP_CP/KCUP_PP를 덮어쓴다. 이렇게 하면 개별 KCUP 블록 함수
+    (make_kcup_box 등)는 코드 변경 없이 새 서식이 적용된다.
+
+    Args:
+        overrides: {"charPr": {"role": {spec}}, "paraPr": {"role": {spec}}}
+            charPr spec 키: size(pt), bold, italic, font, color 등
+            paraPr spec 키: lineSpacing(%), indent(HWPUNIT), align 등
+        registry: PropertyRegistry 인스턴스 (header.xml에서 초기화된 것)
+    """
+    global KCUP_CP, KCUP_PP
+
+    # charPr 오버라이드: 역할명 → dict spec → registry에서 동적 ID 할당
+    for role, spec in overrides.get("charPr", {}).items():
+        if isinstance(spec, dict):
+            new_id = registry.resolve_charPr(spec)
+            KCUP_CP[role] = new_id
+
+    # paraPr 오버라이드: 역할명 → dict spec → registry에서 동적 ID 할당
+    for role, spec in overrides.get("paraPr", {}).items():
+        if isinstance(spec, dict):
+            new_id = registry.resolve_paraPr(spec)
+            KCUP_PP[role] = new_id
+
+
+def restore_kcup_mapping() -> None:
+    """apply_style_overrides로 변경된 KCUP_CP/KCUP_PP를 원래 값으로 복원."""
+    global KCUP_CP, KCUP_PP
+    KCUP_CP = dict(_KCUP_CP_ORIGINAL)
+    KCUP_PP = dict(_KCUP_PP_ORIGINAL)
+
 
 class IDGen:
     def __init__(self, start=1000000001):
@@ -2016,27 +2055,46 @@ def make_kcup_numbered(idgen, item):
     return make_paragraph(idgen, paraPr=pp, charPr=cp, text=full_text)
 
 
-def make_kcup_note(idgen, item):
-    """※ 참고: 15자 이하 인라인(같은 문단 run), 15자 초과 별도줄(charPr=22).
-    JSON에서 명시적으로 type 분리하거나, text 길이로 자동 판별.
-    별도줄 모드: paraPr=26, charPr=22.
+def make_kcup_note(idgen, item, prev_paragraph=None):
+    """※ 참고: inline=true이면 Shift+Enter(lineBreak)로 앞 문단에 병합.
+
+    Args:
+        item: {"type": "kcup_note", "text": "...", "inline": true/false, "mode": "inline"/"line"}
+        prev_paragraph: 앞 문단 etree.Element. inline=true일 때 이 문단에 lineBreak + run 추가.
+
+    inline=true이고 prev_paragraph가 있으면:
+        → 앞 문단의 마지막 run 뒤에 <hp:lineBreak/> + ※ run 추가
+        → None 반환 (새 문단 생성 안 함)
+    그 외:
+        → 독립 문단으로 생성하여 반환.
     """
     text = item.get("text", "")
+    is_inline = item.get("inline", False)
     mode = item.get("mode")  # "inline" | "line" | None(자동)
 
-    if mode is None:
-        mode = "inline" if len(text) <= 15 else "line"
+    if mode == "inline":
+        is_inline = True
+    elif mode == "line":
+        is_inline = False
+    elif mode is None and not is_inline:
+        is_inline = len(text) <= 15
 
-    if mode == "line":
-        pp = item.get("paraPr", KCUP_PP["o"])
-        cp = item.get("charPr", KCUP_CP["bracket"])
-        return make_paragraph(idgen, paraPr=pp, charPr=cp, text=f" ※ {text}")
-    else:
-        # 인라인은 이전 문단에 run을 붙여야 하므로 단독 문단으로 생성
-        # (실제 인라인은 JSON의 runs 배열에서 직접 처리하는 것이 정확)
-        pp = item.get("paraPr", KCUP_PP["o"])
-        cp = item.get("charPr", KCUP_CP["body"])
-        return make_paragraph(idgen, paraPr=pp, charPr=cp, text=f"※ {text}")
+    if is_inline and prev_paragraph is not None:
+        # ★ Shift+Enter 구현: 앞 문단에 lineBreak + ※ run 추가
+        # lineBreak 요소 삽입
+        lb = etree.SubElement(prev_paragraph, hp("lineBreak"))
+        # ※ 텍스트 run 추가
+        cp = item.get("charPr", KCUP_CP.get("bracket", KCUP_CP.get("body", 0)))
+        note_run = make_run(cp, f"  ※ {text}")
+        # dummy parent에서 분리 후 prev_paragraph에 추가
+        note_run.getparent().remove(note_run)
+        prev_paragraph.append(note_run)
+        return None  # 새 문단 없음
+
+    # 독립 문단 모드
+    pp = item.get("paraPr", KCUP_PP["o"])
+    cp = item.get("charPr", KCUP_CP.get("bracket", KCUP_CP.get("body", 0)))
+    return make_paragraph(idgen, paraPr=pp, charPr=cp, text=f" ※ {text}")
 
 
 def make_kcup_attachment(idgen, item):
@@ -2428,7 +2486,12 @@ def build_section(json_data, base_section_path=None, template=None,
             sec.append(make_kcup_numbered(idgen, item))
 
         elif item_type == "kcup_note":
-            sec.append(make_kcup_note(idgen, item))
+            # ★ inline=true이면 앞 문단에 lineBreak로 병합
+            prev_para = sec[-1] if len(sec) > 0 else None
+            result = make_kcup_note(idgen, item, prev_paragraph=prev_para)
+            if result is not None:
+                sec.append(result)
+            # result=None이면 앞 문단에 이미 병합됨
 
         elif item_type == "kcup_attachment":
             sec.append(make_kcup_attachment(idgen, item))
