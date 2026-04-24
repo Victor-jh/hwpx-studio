@@ -28,6 +28,7 @@ Usage:
 
 import argparse
 import json
+import re as _re
 import shutil
 import sys
 import tempfile
@@ -36,6 +37,23 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from lxml import etree
+
+
+def _fix_xml_declaration(xml_bytes: bytes) -> bytes:
+    """lxml이 생성한 XML 선언에 standalone='yes'를 추가하고 쌍따옴표로 통일.
+
+    한컴 오피스/Windows MS Office는 standalone="yes"가 없으면 파일을 열지 못하는
+    경우가 있으므로, 원본 HWPX 형식과 호환되도록 보정한다.
+    """
+    # <?xml version='1.0' encoding='UTF-8'?>  →  <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+    def _replace(m):
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
+    return _re.sub(
+        rb"""<\?xml\s+version=['"]([\d.]+)['"]\s+encoding=['"]([^'"]+)['"]\s*\??>""",
+        lambda m: b'<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>',
+        xml_bytes,
+        count=1,
+    )
 
 try:
     from hwpx_studio.property_registry import PropertyRegistry
@@ -60,6 +78,22 @@ def validate_xml(filepath: Path) -> None:
         etree.parse(str(filepath))
     except etree.XMLSyntaxError as e:
         raise SystemExit(f"Malformed XML in {filepath.name}: {e}")
+
+
+def write_xml(tree, path, **kwargs) -> None:
+    """lxml tree를 파일로 쓰고, XML 선언에 standalone='yes'를 자동 추가.
+
+    한컴 오피스 호환성을 위해 모든 XML 쓰기를 이 함수를 통해 수행.
+    """
+    kwargs.setdefault("xml_declaration", True)
+    kwargs.setdefault("encoding", "UTF-8")
+    kwargs.setdefault("pretty_print", True)
+    tree.write(str(path), **kwargs)
+    # 후처리: standalone="yes" 추가 + 쌍따옴표 통일
+    raw = Path(path).read_bytes()
+    fixed = _fix_xml_declaration(raw)
+    if fixed != raw:
+        Path(path).write_bytes(fixed)
 
 
 def update_metadata(content_hpf: Path, title: str | None, creator: str | None) -> None:
@@ -93,12 +127,7 @@ def update_metadata(content_hpf: Path, title: str | None, creator: str | None) -
             meta.text = now.strftime("%Y년 %m월 %d일")
 
     etree.indent(root, space="  ")
-    tree.write(
-        str(content_hpf),
-        pretty_print=True,
-        xml_declaration=True,
-        encoding="UTF-8",
-    )
+    write_xml(tree, content_hpf)
 
 
 def pack_hwpx(input_dir: Path, output_path: Path) -> None:
@@ -200,8 +229,7 @@ def _register_sections_in_hpf(content_hpf: Path, section_files: list[str]) -> No
         ref.set("linear", "yes")
 
     etree.indent(root, space="  ")
-    tree.write(str(content_hpf), pretty_print=True,
-               xml_declaration=True, encoding="UTF-8")
+    write_xml(tree, content_hpf)
 
 
 def _register_images_in_hpf(content_hpf: Path, images: list[dict]) -> None:
@@ -236,8 +264,7 @@ def _register_images_in_hpf(content_hpf: Path, images: list[dict]) -> None:
         item.set("isEmbeded", "1")
 
     etree.indent(root, space="  ")
-    tree.write(str(content_hpf), pretty_print=True,
-               xml_declaration=True, encoding="UTF-8")
+    write_xml(tree, content_hpf)
 
 
 def _copy_images_to_bindata(work_dir: Path, images: list[dict]) -> None:
@@ -404,11 +431,10 @@ def build(
                   f"+{stats['new_borderFill']} borderFill, "
                   f"+{stats['new_fonts']} fonts", file=sys.stderr)
 
-        # 6. Validate all XML files
-        for xml_file in work.rglob("*.xml"):
-            validate_xml(xml_file)
-        for hpf_file in work.rglob("*.hpf"):
-            validate_xml(hpf_file)
+        # 6. Validate all XML/HPF files (단일 패스)
+        for f in work.rglob("*"):
+            if f.is_file() and f.suffix in (".xml", ".hpf"):
+                validate_xml(f)
 
         # 7. Pack
         pack_hwpx(work, output)

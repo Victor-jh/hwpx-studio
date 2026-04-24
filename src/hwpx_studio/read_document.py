@@ -1098,41 +1098,47 @@ class HWPXReader:
         self._meta: dict[str, Any] = {}
 
     def load(self) -> "HWPXReader":
-        """HWPX ZIP에서 필요한 파일들을 추출."""
+        """HWPX ZIP에서 필요한 파일들을 추출.
+
+        단일 패스: namelist를 1회만 순회하면서 header/section/meta를 동시 분류.
+        """
         with zipfile.ZipFile(self.path, "r") as zf:
-            names = zf.namelist()
+            header_name = None
+            section_names = []
+            hpf_name = None
+
+            # 단일 패스 분류
+            for n in zf.namelist():
+                if "Contents" in n:
+                    if n.endswith("header.xml") and header_name is None:
+                        header_name = n
+                    elif re.search(r'section\d+\.xml$', n):
+                        section_names.append(n)
+                if n.endswith("content.hpf"):
+                    hpf_name = n
 
             # header.xml
-            header_candidates = [
-                n for n in names
-                if n.endswith("header.xml") and "Contents" in n
-            ]
-            if header_candidates:
-                self._header_xml = zf.read(header_candidates[0])
+            if header_name:
+                self._header_xml = zf.read(header_name)
                 self.style_registry = StyleRegistry.from_xml(self._header_xml)
 
-            # section*.xml
-            section_names = sorted([
-                n for n in names
-                if re.search(r'section\d+\.xml$', n) and "Contents" in n
-            ])
-            for sn in section_names:
+            # section*.xml (정렬)
+            for sn in sorted(section_names):
                 self._section_xmls.append((sn, zf.read(sn)))
 
-            # 메타데이터 (content.hpf 또는 META-INF)
-            for n in names:
-                if n.endswith("content.hpf"):
-                    try:
-                        hpf = etree.fromstring(zf.read(n))
-                        title_el = hpf.find(".//{http://purl.org/dc/elements/1.1/}title")
-                        if title_el is not None and title_el.text:
-                            self._meta["title"] = title_el.text
-                        creator_el = hpf.find(
-                            ".//{http://purl.org/dc/elements/1.1/}creator")
-                        if creator_el is not None and creator_el.text:
-                            self._meta["creator"] = creator_el.text
-                    except Exception:
-                        pass
+            # 메타데이터
+            if hpf_name:
+                try:
+                    hpf = etree.fromstring(zf.read(hpf_name))
+                    title_el = hpf.find(".//{http://purl.org/dc/elements/1.1/}title")
+                    if title_el is not None and title_el.text:
+                        self._meta["title"] = title_el.text
+                    creator_el = hpf.find(
+                        ".//{http://purl.org/dc/elements/1.1/}creator")
+                    if creator_el is not None and creator_el.text:
+                        self._meta["creator"] = creator_el.text
+                except Exception:
+                    pass
 
         return self
 

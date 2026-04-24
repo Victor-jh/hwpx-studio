@@ -96,8 +96,17 @@ _KCUP_FALLBACK_CP = {
 _KCUP_FALLBACK_PP = {"o": 26, "box": 28, "dash": 30, "gap": 31}
 
 
+_kcup_mapping_cache: dict[str, dict] = {}  # header_name → parsed data
+
+
 def load_kcup_mapping(header_name="cost"):
-    """templates/kcup/mappings/{header_name}.json 로드. 실패 시 fallback 반환."""
+    """templates/kcup/mappings/{header_name}.json 로드. 실패 시 fallback 반환.
+
+    모듈 레벨 캐시: 동일 header_name은 파일시스템 탐색 없이 즉시 반환.
+    """
+    if header_name in _kcup_mapping_cache:
+        return _kcup_mapping_cache[header_name]
+
     candidates = [
         Path(__file__).resolve().parent / "templates" / "kcup" / "mappings" / f"{header_name}.json",
         Path(__file__).resolve().parent / ".." / ".." / "templates" / "kcup" / "mappings" / f"{header_name}.json",
@@ -107,12 +116,15 @@ def load_kcup_mapping(header_name="cost"):
         if p.exists():
             with open(p, encoding="utf-8") as f:
                 data = json.load(f)
+            _kcup_mapping_cache[header_name] = data
             return data
-    return {
+    fallback = {
         "charPr": dict(_KCUP_FALLBACK_CP),
         "paraPr": dict(_KCUP_FALLBACK_PP),
         "_meta": {"name": "fallback (cost_header)", "source": "hardcoded"},
     }
+    _kcup_mapping_cache[header_name] = fallback
+    return fallback
 
 
 def _init_kcup_mapping():
@@ -225,17 +237,29 @@ def make_empty(idgen, paraPr=0, charPr=0):
 # 글로벌 이미지 레지스트리: section_builder 전체에서 수집, 나중에 사이드카 JSON 출력
 _IMAGE_REGISTRY = []  # [{"id": "image1", "src": "/abs/path", "media_type": "image/png"}]
 
+# 이미지 치수 캐시: 동일 파일 반복 파싱 방지
+_IMAGE_DIM_CACHE: dict[str, tuple] = {}  # abs_path → (w, h)
+
 
 def _get_image_dimensions(file_path):
-    """PNG/JPEG/GIF/BMP 파일에서 (width_px, height_px) 추출. Pillow 불필요."""
+    """PNG/JPEG/GIF/BMP 파일에서 (width_px, height_px) 추출. Pillow 불필요.
+
+    결과를 모듈 레벨 캐시에 저장하여 동일 파일 재파싱 방지.
+    """
+    abs_key = str(Path(file_path).resolve())
+    if abs_key in _IMAGE_DIM_CACHE:
+        return _IMAGE_DIM_CACHE[abs_key]
+
     p = Path(file_path)
     if not p.exists():
+        _IMAGE_DIM_CACHE[abs_key] = (None, None)
         return None, None
     with open(p, "rb") as f:
         header = f.read(32)
     # PNG
     if header[:8] == b"\x89PNG\r\n\x1a\n":
         w, h = struct.unpack(">II", header[16:24])
+        _IMAGE_DIM_CACHE[abs_key] = (w, h)
         return w, h
     # JPEG
     if header[:2] == b"\xff\xd8":
@@ -250,19 +274,24 @@ def _get_image_dimensions(file_path):
                 if marker[1] in (0xC0, 0xC1, 0xC2):
                     f.read(3)  # length + precision
                     h, w = struct.unpack(">HH", f.read(4))
+                    _IMAGE_DIM_CACHE[abs_key] = (w, h)
                     return w, h
                 else:
                     length = struct.unpack(">H", f.read(2))[0]
                     f.read(length - 2)
+        _IMAGE_DIM_CACHE[abs_key] = (None, None)
         return None, None
     # GIF
     if header[:4] in (b"GIF8",):
         w, h = struct.unpack("<HH", header[6:10])
+        _IMAGE_DIM_CACHE[abs_key] = (w, h)
         return w, h
     # BMP
     if header[:2] == b"BM":
         w, h = struct.unpack("<ii", header[18:26])
+        _IMAGE_DIM_CACHE[abs_key] = (w, abs(h))
         return w, abs(h)
+    _IMAGE_DIM_CACHE[abs_key] = (None, None)
     return None, None
 
 
@@ -498,8 +527,9 @@ def get_image_registry():
 
 
 def reset_image_registry():
-    """이미지 레지스트리 초기화 (테스트/재실행용)."""
+    """이미지 레지스트리 + 치수 캐시 초기화 (테스트/재실행용)."""
     _IMAGE_REGISTRY.clear()
+    _IMAGE_DIM_CACHE.clear()
 
 
 # ── 다중 run 지원 ───────────────────────────────────────────────
@@ -2767,6 +2797,23 @@ def _build_item(idgen, item, body_width, template, registry=None):
     return elements
 
 
+def _fix_standalone(path) -> None:
+    """XML 파일의 선언에 standalone='yes'를 추가 (한컴 오피스 호환)."""
+    import re as _re_local
+    p = Path(path)
+    if not p.is_file():
+        return
+    raw = p.read_bytes()
+    fixed = _re_local.sub(
+        rb"""<\?xml\s+version=['"]([\d.]+)['"]\s+encoding=['"]([^'"]+)['"]\s*\??>""",
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>',
+        raw,
+        count=1,
+    )
+    if fixed != raw:
+        p.write_bytes(fixed)
+
+
 def _write_images_sidecar(output_path):
     """이미지 레지스트리를 _images.json 사이드카 파일로 출력."""
     images = get_image_registry()
@@ -2854,6 +2901,7 @@ def main():
             fpath = out_dir / fname
             tree.write(str(fpath), xml_declaration=True, encoding="UTF-8",
                        pretty_print=True)
+            _fix_standalone(fpath)
         print(f"Generated {len(results)} sections in {out_dir}",
               file=sys.stderr)
         _write_images_sidecar(out_dir)
@@ -2862,6 +2910,7 @@ def main():
         tree = build_xml(data, base, template=args.template, registry=registry)
         tree.write(args.output, xml_declaration=True, encoding="UTF-8",
                    pretty_print=True)
+        _fix_standalone(args.output)
         if args.output != "/dev/stdout":
             print(f"Generated: {args.output}", file=sys.stderr)
             _write_images_sidecar(args.output)
