@@ -1193,66 +1193,87 @@ class HWPXReader:
         return result
 
     def _resolve_block_styles(self, blocks: list[dict]) -> None:
-        """블록 리스트의 charPr/paraPr ID를 실제 속성값으로 확장."""
+        """블록 리스트의 charPr/paraPr ID를 실제 속성값으로 확장.
+
+        ID별 캐싱: 동일 charPr/paraPr ID는 한 번만 해석하고 재사용.
+        """
         if not self.style_registry:
             return
         reg = self.style_registry
 
+        # 캐시: ID → resolved dict (문서 내 동일 ID 반복 해석 방지)
+        _cp_cache: dict[int, dict | None] = {}
+        _pp_cache: dict[int, dict | None] = {}
+
+        def _resolve_charPr(cid: int) -> dict | None:
+            if cid in _cp_cache:
+                return _cp_cache[cid]
+            spec = reg.get_charPr_spec(cid)
+            if not spec:
+                _cp_cache[cid] = None
+                return None
+            resolved = {}
+            if "height" in spec:
+                resolved["size_pt"] = spec["height"] / 100
+            resolved["bold"] = spec.get("bold", False)
+            resolved["italic"] = spec.get("italic", False)
+            if "textColor" in spec:
+                resolved["color"] = spec["textColor"]
+            if "shadeColor" in spec and spec["shadeColor"] != "none":
+                resolved["shadeColor"] = spec["shadeColor"]
+            if "fontRef" in spec:
+                font_name = reg.get_font_name(spec["fontRef"])
+                if font_name:
+                    resolved["font"] = font_name
+            if "underline" in spec and spec["underline"] != "NONE":
+                resolved["underline"] = spec["underline"]
+            if "strikeout" in spec and spec["strikeout"] != "NONE":
+                resolved["strikeout"] = spec["strikeout"]
+            if "spacing" in spec and spec["spacing"] != 0:
+                resolved["spacing"] = spec["spacing"]
+            _cp_cache[cid] = resolved
+            return resolved
+
+        def _resolve_paraPr(pid: int) -> dict | None:
+            if pid in _pp_cache:
+                return _pp_cache[pid]
+            spec = reg.get_paraPr_spec(pid)
+            if not spec:
+                _pp_cache[pid] = None
+                return None
+            resolved = {}
+            if "align" in spec:
+                resolved["align"] = spec["align"]
+            if "lineSpacing" in spec:
+                resolved["lineSpacing"] = spec["lineSpacing"]
+                resolved["lineSpacingType"] = spec.get(
+                    "lineSpacingType", "PERCENT")
+            if "margin" in spec:
+                resolved["margin"] = spec["margin"]
+            if "tabPrIDRef" in spec and spec["tabPrIDRef"] != "0":
+                resolved["tabPrIDRef"] = spec["tabPrIDRef"]
+            _pp_cache[pid] = resolved
+            return resolved
+
         for block in blocks:
             # charPr 해석
-            if "charPr" in block:
-                cid = block["charPr"]
-                if isinstance(cid, int):
-                    spec = reg.get_charPr_spec(cid)
-                    if spec:
-                        resolved = {}
-                        if "height" in spec:
-                            resolved["size_pt"] = spec["height"] / 100
-                        resolved["bold"] = spec.get("bold", False)
-                        resolved["italic"] = spec.get("italic", False)
-                        if "textColor" in spec:
-                            resolved["color"] = spec["textColor"]
-                        if "fontRef" in spec:
-                            font_name = reg.get_font_name(spec["fontRef"])
-                            if font_name:
-                                resolved["font"] = font_name
-                        if "underline" in spec and spec["underline"] != "NONE":
-                            resolved["underline"] = spec["underline"]
-                        block["charPr_resolved"] = resolved
+            if "charPr" in block and isinstance(block["charPr"], int):
+                r = _resolve_charPr(block["charPr"])
+                if r:
+                    block["charPr_resolved"] = dict(r)
 
             # paraPr 해석
-            if "paraPr" in block:
-                pid = block["paraPr"]
-                if isinstance(pid, int):
-                    spec = reg.get_paraPr_spec(pid)
-                    if spec:
-                        resolved = {}
-                        if "align" in spec:
-                            resolved["align"] = spec["align"]
-                        if "lineSpacing" in spec:
-                            resolved["lineSpacing"] = spec["lineSpacing"]
-                            resolved["lineSpacingType"] = spec.get(
-                                "lineSpacingType", "PERCENT")
-                        if "margin" in spec:
-                            resolved["margin"] = spec["margin"]
-                        block["paraPr_resolved"] = resolved
+            if "paraPr" in block and isinstance(block["paraPr"], int):
+                r = _resolve_paraPr(block["paraPr"])
+                if r:
+                    block["paraPr_resolved"] = dict(r)
 
             # runs 내부도 해석
             for run in block.get("runs", []):
-                if "charPr" in run:
-                    cid = run["charPr"]
-                    if isinstance(cid, int):
-                        spec = reg.get_charPr_spec(cid)
-                        if spec:
-                            resolved = {}
-                            if "height" in spec:
-                                resolved["size_pt"] = spec["height"] / 100
-                            resolved["bold"] = spec.get("bold", False)
-                            if "fontRef" in spec:
-                                font_name = reg.get_font_name(spec["fontRef"])
-                                if font_name:
-                                    resolved["font"] = font_name
-                            run["charPr_resolved"] = resolved
+                if "charPr" in run and isinstance(run["charPr"], int):
+                    r = _resolve_charPr(run["charPr"])
+                    if r:
+                        run["charPr_resolved"] = dict(r)
 
     def _parse_section(self, xml_bytes: bytes) -> dict:
         """단일 section XML → JSON dict."""

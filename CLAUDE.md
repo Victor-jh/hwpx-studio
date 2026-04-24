@@ -112,6 +112,64 @@ pytest --cov=hwpx_studio --cov-report=term-missing tests/
 Types: feat, fix, refactor, docs, test, chore, perf
 ```
 
+## kordoc 연동 (하이브리드 모드)
+
+hwpx-studio와 kordoc은 역할을 분리하여 병행 사용한다.
+
+### 역할 분리
+
+| 작업 | 담당 | 이유 |
+|------|------|------|
+| HWPX 생성 (KCUP 보고서) | **hwpx-studio** | KCUP 16블록 + 테마 시스템 유일 지원 |
+| HWPX 편집 (텍스트 교체) | **hwpx-studio** | edit_document.py 인플레이스 편집 |
+| 기존 양식 필드 채우기 | **kordoc** fill_form | charPrIDRef 100% 보존, 체크박스/괄호 자동 감지 |
+| HWP/DOCX/PPTX/PDF 읽기 | **kordoc** parse_document | 멀티포맷 → Markdown 변환 |
+| HWPX 읽기 (구조 분석) | **hwpx-studio** | JSON 라운드트립 + 스타일 해석 |
+| 문서 비교 | **kordoc** compare_documents | 크로스포맷 diff (HWP↔HWPX) |
+
+### kordoc MCP 설정
+
+```bash
+# 자동 설정 (Claude Desktop/Cursor 등 자동 감지)
+npx -y kordoc setup
+
+# 수동 설정 (claude_desktop_config.json)
+{
+  "mcpServers": {
+    "kordoc": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "kordoc", "mcp"]
+    }
+  }
+}
+```
+
+### kordoc MCP 도구 (8개)
+
+| 도구 | 파라미터 | 용도 |
+|------|---------|------|
+| `fill_form` | file_path, fields, output_format?, output_path? | 양식 채우기 (hwpx-preserve 모드) |
+| `parse_document` | file_path | HWP/HWPX/PDF/DOCX/XLSX → Markdown |
+| `parse_form` | file_path | 양식 필드 추출 (label-value JSON) |
+| `parse_table` | file_path, table_index | N번째 표 추출 |
+| `parse_pages` | file_path, pages | 범위 파싱 ("1-3", "1,3,5") |
+| `parse_metadata` | file_path | 메타데이터만 빠르게 추출 |
+| `detect_format` | file_path | 파일 포맷 감지 (magic bytes) |
+| `compare_documents` | file_path_a, file_path_b | 크로스포맷 diff |
+
+### 통합 워크플로우 예시
+
+```python
+# 1. 기존 양식에 데이터 채우기 (kordoc)
+#    → fill_form(file_path="양식.hwpx", fields={"성명": "홍길동"}, output_format="hwpx-preserve")
+
+# 2. KCUP 보고서 새로 생성 (hwpx-studio)
+#    → hwpx_create(json_dsl=..., style="kcup", style_overrides=...)
+
+# 3. HWP 파일 읽어서 HWPX로 재생성 (kordoc 읽기 → hwpx-studio 생성)
+#    → parse_document(file_path="old.hwp") → Markdown → hwpx_create
+```
+
 ## Key Constraints
 
 1. `.hwpx` only — binary `.hwp` 절대 불가
