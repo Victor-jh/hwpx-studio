@@ -2357,191 +2357,13 @@ def build_section(json_data, base_section_path=None, template=None,
     if json_data.get("auto_spacing", True):
         content = auto_spacing(content)
 
+    # BLOCK_HANDLERS registry 기반 dispatch
     for item in content:
-        item_type = item.get("type", "text")
-
-        if item_type == "empty":
-            cp = _resolve_cp(item, 0, registry)
-            pp = _resolve_pp(item, 0, registry)
-            sec.append(make_empty(idgen, paraPr=pp, charPr=cp))
-
-        elif item_type in ("text", "paragraph"):
-            runs = build_runs_with_registry(item, registry)
-            cp = _resolve_cp(item, 0, registry)
-            pp = _resolve_pp(item, 0, registry)
-            sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                       text=item.get("text"), runs=runs))
-
-        elif item_type == "heading":
-            level = item.get("level", 1)
-            dflt = HEADING_DEFAULTS.get(level, HEADING_DEFAULTS[1])
-            cp = _resolve_cp(item, dflt["charPr"], registry)
-            pp = _resolve_pp(item, dflt["paraPr"], registry)
-            sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                       text=item.get("text", "")))
-
-        elif item_type == "bullet":
-            label = item.get("label", "•")
-            text = item.get("text", "")
-            full_text = f"{label} {text}"
-            pp = _resolve_pp(item, 24, registry)
-            cp = _resolve_cp(item, 0, registry)
-            runs = build_runs_with_registry(item, registry)
-            if not runs:
-                sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                           text=full_text))
-            else:
-                sec.append(make_paragraph(idgen, paraPr=pp, runs=runs))
-
-        elif item_type == "numbered":
-            num = item.get("num", 1)
-            style = item.get("style", "circle")
-            text = item.get("text", "")
-
-            if style == "roman":
-                prefix = ROMAN[num - 1] if num <= len(ROMAN) else f"{num}."
-            elif style == "circle":
-                prefix = CIRCLE_NUMS[num - 1] if num <= len(CIRCLE_NUMS) else f"({num})"
-            elif style == "dot":
-                prefix = f"{num}."
-            elif style == "kcup":
-                prefix = f"□ {num}."
-            else:
-                prefix = f"{num}."
-
-            full_text = f"{prefix} {text}"
-            ns = NUMBERED_DEFAULTS.get(style, NUMBERED_DEFAULTS["circle"])
-            pp = _resolve_pp(item, ns["paraPr"], registry)
-            cp = _resolve_cp(item, ns["charPr"], registry)
-            runs = build_runs_with_registry(item, registry)
-            if not runs:
-                sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                           text=full_text))
-            else:
-                sec.append(make_paragraph(idgen, paraPr=pp, runs=runs))
-
-        elif item_type == "indent":
-            label = item.get("label", "")
-            text = item.get("text", "")
-            full_text = f"{label}: {text}" if label else text
-            pp = _resolve_pp(item, 25, registry)
-            cp = _resolve_cp(item, 0, registry)
-            sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                       text=full_text))
-
-        elif item_type == "note":
-            text = item.get("text", "")
-            full_text = f"※ {text}"
-            pp = _resolve_pp(item, 0, registry)
-            cp = _resolve_cp(item, 11, registry)
-            sec.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                       text=full_text))
-
-        elif item_type == "table":
-            sec.append(make_table(idgen, item, body_width=body_width,
-                                   registry=registry))
-
-        elif item_type == "label_value":
-            sec.append(make_label_value(idgen, item, body_width=body_width,
-                                         registry=registry))
-
-        elif item_type == "signature":
-            for p in make_signature(idgen, item):
-                sec.append(p)
-
-        elif item_type == "pagebreak":
-            sec.append(make_paragraph(idgen, pageBreak="1"))
-
-        elif item_type == "image":
-            img_p, _img_info = make_image_paragraph(idgen, item,
-                                                     body_width=body_width)
-            sec.append(img_p)
-
-        elif item_type == "textbox":
-            sec.append(make_textbox_paragraph(idgen, item,
-                                               body_width=body_width,
-                                               registry=registry))
-
-        elif item_type == "hyperlink":
-            sec.append(make_hyperlink_paragraph(idgen, item, registry=registry))
-
-        elif item_type in ("text_footnote", "text_endnote", "footnote"):
-            sec.append(make_text_with_footnote(idgen, item, registry=registry))
-
-        elif item_type == "caption":
-            sec.append(make_caption_paragraph(idgen, item, registry=registry))
-
-        elif item_type == "bookmark":
-            sec.append(make_bookmark_paragraph(idgen, item, registry=registry))
-
-        elif item_type == "field":
-            sec.append(make_field_paragraph(idgen, item, registry=registry))
-
-        # ── KCUP 전용 타입 ────────────────────────────────
-        elif item_type == "kcup_cover":
-            for el in make_kcup_cover(idgen, item):
-                sec.append(el)
-
-        elif item_type == "kcup_box":
-            sec.append(make_kcup_box(idgen, item))
-
-        elif item_type == "kcup_box_spacing":
-            sec.append(make_kcup_box_spacing(idgen, item))
-
-        elif item_type == "kcup_o":
-            sec.append(make_kcup_o(idgen, item))
-
-        elif item_type == "kcup_o_plain":
-            sec.append(make_kcup_o_plain(idgen, item))
-
-        elif item_type == "kcup_o_heading":
-            sec.append(make_kcup_o_heading(idgen, item))
-
-        elif item_type == "kcup_o_spacing":
-            sec.append(make_kcup_o_spacing(idgen, item))
-
-        elif item_type == "kcup_o_heading_spacing":
-            sec.append(make_kcup_o_heading_spacing(idgen, item))
-
-        elif item_type == "kcup_dash":
-            sec.append(make_kcup_dash(idgen, item))
-
-        elif item_type == "kcup_dash_plain":
-            sec.append(make_kcup_dash_plain(idgen, item))
-
-        elif item_type == "kcup_dash_spacing":
-            sec.append(make_kcup_dash_spacing(idgen, item))
-
-        elif item_type == "kcup_numbered":
-            sec.append(make_kcup_numbered(idgen, item))
-
-        elif item_type == "kcup_note":
-            # ★ inline=true이면 앞 문단에 lineBreak로 병합
-            prev_para = sec[-1] if len(sec) > 0 else None
-            result = make_kcup_note(idgen, item, prev_paragraph=prev_para)
-            if result is not None:
-                sec.append(result)
-            # result=None이면 앞 문단에 이미 병합됨
-
-        elif item_type == "kcup_attachment":
-            sec.append(make_kcup_attachment(idgen, item))
-
-        elif item_type == "kcup_attachment_table":
-            for el in make_kcup_attachment_table(idgen, item,
-                                                  body_width=body_width,
-                                                  registry=registry):
-                sec.append(el)
-
-        elif item_type == "kcup_pointer":
-            sec.append(make_kcup_pointer(idgen, item))
-
-        elif item_type == "kcup_mixed_run":
-            sec.append(make_kcup_mixed_run(idgen, item))
-
-        else:
-            print(f"WARNING: unknown type '{item_type}', treating as text",
-                  file=sys.stderr)
-            sec.append(make_paragraph(idgen, text=item.get("text", "")))
+        prev_el = sec[-1] if len(sec) > 0 else None
+        elements = _build_item(idgen, item, body_width, template,
+                               registry=registry, prev_element=prev_el)
+        for el in elements:
+            sec.append(el)
 
     return sec
 
@@ -2653,148 +2475,274 @@ def build_multi_sections(json_data, base_section_path=None, template=None, regis
     return results
 
 
-def _build_item(idgen, item, body_width, template, registry=None):
+# ── Block Handler Registry ────────────────────────────────────────
+# 각 핸들러: (idgen, item, ctx) → list[etree.Element]
+# ctx = {"body_width": int, "template": str, "registry": Registry|None,
+#        "prev_element": Element|None}
+
+class BuildContext:
+    """블록 핸들러에 전달되는 빌드 컨텍스트."""
+    __slots__ = ("body_width", "template", "registry", "prev_element")
+
+    def __init__(self, body_width=BODY_WIDTH, template=None, registry=None):
+        self.body_width = body_width
+        self.template = template
+        self.registry = registry
+        self.prev_element = None  # kcup_note inline용
+
+
+def _h_empty(idgen, item, ctx):
+    cp = _resolve_cp(item, 0, ctx.registry)
+    pp = _resolve_pp(item, 0, ctx.registry)
+    return [make_empty(idgen, paraPr=pp, charPr=cp)]
+
+
+def _h_text(idgen, item, ctx):
+    runs = build_runs_with_registry(item, ctx.registry)
+    cp = _resolve_cp(item, 0, ctx.registry)
+    pp = _resolve_pp(item, 0, ctx.registry)
+    return [make_paragraph(idgen, paraPr=pp, charPr=cp,
+                           text=item.get("text"), runs=runs)]
+
+
+def _h_heading(idgen, item, ctx):
+    level = item.get("level", 1)
+    dflt = HEADING_DEFAULTS.get(level, HEADING_DEFAULTS[1])
+    cp = _resolve_cp(item, dflt["charPr"], ctx.registry)
+    pp = _resolve_pp(item, dflt["paraPr"], ctx.registry)
+    return [make_paragraph(idgen, paraPr=pp, charPr=cp,
+                           text=item.get("text", ""))]
+
+
+def _h_bullet(idgen, item, ctx):
+    label = item.get("label", "•")
+    text = item.get("text", "")
+    full_text = f"{label} {text}"
+    pp = _resolve_pp(item, 24, ctx.registry)
+    cp = _resolve_cp(item, 0, ctx.registry)
+    runs = build_runs_with_registry(item, ctx.registry)
+    if not runs:
+        return [make_paragraph(idgen, paraPr=pp, charPr=cp, text=full_text)]
+    return [make_paragraph(idgen, paraPr=pp, runs=runs)]
+
+
+def _h_numbered(idgen, item, ctx):
+    num = item.get("num", 1)
+    style = item.get("style", "circle")
+    text = item.get("text", "")
+    if style == "roman":
+        prefix = ROMAN[num - 1] if num <= len(ROMAN) else f"{num}."
+    elif style == "circle":
+        prefix = CIRCLE_NUMS[num - 1] if num <= len(CIRCLE_NUMS) else f"({num})"
+    elif style == "dot":
+        prefix = f"{num}."
+    elif style == "kcup":
+        prefix = f"□ {num}."
+    else:
+        prefix = f"{num}."
+    full_text = f"{prefix} {text}"
+    ns = NUMBERED_DEFAULTS.get(style, NUMBERED_DEFAULTS["circle"])
+    pp = _resolve_pp(item, ns["paraPr"], ctx.registry)
+    cp = _resolve_cp(item, ns["charPr"], ctx.registry)
+    runs = build_runs_with_registry(item, ctx.registry)
+    if not runs:
+        return [make_paragraph(idgen, paraPr=pp, charPr=cp, text=full_text)]
+    return [make_paragraph(idgen, paraPr=pp, runs=runs)]
+
+
+def _h_indent(idgen, item, ctx):
+    label = item.get("label", "")
+    text = item.get("text", "")
+    full_text = f"{label}: {text}" if label else text
+    pp = _resolve_pp(item, 25, ctx.registry)
+    cp = _resolve_cp(item, 0, ctx.registry)
+    return [make_paragraph(idgen, paraPr=pp, charPr=cp, text=full_text)]
+
+
+def _h_note(idgen, item, ctx):
+    text = item.get("text", "")
+    full_text = f"※ {text}"
+    pp = _resolve_pp(item, 0, ctx.registry)
+    cp = _resolve_cp(item, 11, ctx.registry)
+    return [make_paragraph(idgen, paraPr=pp, charPr=cp, text=full_text)]
+
+
+def _h_table(idgen, item, ctx):
+    return [make_table(idgen, item, body_width=ctx.body_width,
+                       registry=ctx.registry)]
+
+
+def _h_label_value(idgen, item, ctx):
+    return [make_label_value(idgen, item, body_width=ctx.body_width,
+                             registry=ctx.registry)]
+
+
+def _h_signature(idgen, item, ctx):
+    return list(make_signature(idgen, item))
+
+
+def _h_pagebreak(idgen, item, ctx):
+    return [make_paragraph(idgen, pageBreak="1")]
+
+
+def _h_image(idgen, item, ctx):
+    img_p, _ = make_image_paragraph(idgen, item, body_width=ctx.body_width)
+    return [img_p]
+
+
+def _h_textbox(idgen, item, ctx):
+    return [make_textbox_paragraph(idgen, item, body_width=ctx.body_width,
+                                   registry=ctx.registry)]
+
+
+def _h_hyperlink(idgen, item, ctx):
+    return [make_hyperlink_paragraph(idgen, item, registry=ctx.registry)]
+
+
+def _h_footnote(idgen, item, ctx):
+    return [make_text_with_footnote(idgen, item, registry=ctx.registry)]
+
+
+def _h_caption(idgen, item, ctx):
+    return [make_caption_paragraph(idgen, item, registry=ctx.registry)]
+
+
+def _h_bookmark(idgen, item, ctx):
+    return [make_bookmark_paragraph(idgen, item, registry=ctx.registry)]
+
+
+def _h_field(idgen, item, ctx):
+    return [make_field_paragraph(idgen, item, registry=ctx.registry)]
+
+
+# KCUP handlers
+def _h_kcup_cover(idgen, item, ctx):
+    return list(make_kcup_cover(idgen, item))
+
+def _h_kcup_box(idgen, item, ctx):
+    return [make_kcup_box(idgen, item)]
+
+def _h_kcup_box_spacing(idgen, item, ctx):
+    return [make_kcup_box_spacing(idgen, item)]
+
+def _h_kcup_o(idgen, item, ctx):
+    return [make_kcup_o(idgen, item)]
+
+def _h_kcup_o_plain(idgen, item, ctx):
+    return [make_kcup_o_plain(idgen, item)]
+
+def _h_kcup_o_heading(idgen, item, ctx):
+    return [make_kcup_o_heading(idgen, item)]
+
+def _h_kcup_o_spacing(idgen, item, ctx):
+    return [make_kcup_o_spacing(idgen, item)]
+
+def _h_kcup_o_heading_spacing(idgen, item, ctx):
+    return [make_kcup_o_heading_spacing(idgen, item)]
+
+def _h_kcup_dash(idgen, item, ctx):
+    return [make_kcup_dash(idgen, item)]
+
+def _h_kcup_dash_plain(idgen, item, ctx):
+    return [make_kcup_dash_plain(idgen, item)]
+
+def _h_kcup_dash_spacing(idgen, item, ctx):
+    return [make_kcup_dash_spacing(idgen, item)]
+
+def _h_kcup_numbered(idgen, item, ctx):
+    return [make_kcup_numbered(idgen, item)]
+
+def _h_kcup_note(idgen, item, ctx):
+    result = make_kcup_note(idgen, item, prev_paragraph=ctx.prev_element)
+    if result is None:
+        return []  # 앞 문단에 병합됨
+    return [result]
+
+def _h_kcup_attachment(idgen, item, ctx):
+    return [make_kcup_attachment(idgen, item)]
+
+def _h_kcup_attachment_table(idgen, item, ctx):
+    return list(make_kcup_attachment_table(idgen, item,
+                                           body_width=ctx.body_width,
+                                           registry=ctx.registry))
+
+def _h_kcup_pointer(idgen, item, ctx):
+    return [make_kcup_pointer(idgen, item)]
+
+def _h_kcup_mixed_run(idgen, item, ctx):
+    return [make_kcup_mixed_run(idgen, item)]
+
+
+# ── Handler Registry: type → handler function ──
+BLOCK_HANDLERS: dict[str, callable] = {
+    "empty": _h_empty,
+    "text": _h_text,
+    "paragraph": _h_text,
+    "heading": _h_heading,
+    "bullet": _h_bullet,
+    "numbered": _h_numbered,
+    "indent": _h_indent,
+    "note": _h_note,
+    "table": _h_table,
+    "label_value": _h_label_value,
+    "signature": _h_signature,
+    "pagebreak": _h_pagebreak,
+    "image": _h_image,
+    "textbox": _h_textbox,
+    "hyperlink": _h_hyperlink,
+    "text_footnote": _h_footnote,
+    "text_endnote": _h_footnote,
+    "footnote": _h_footnote,
+    "caption": _h_caption,
+    "bookmark": _h_bookmark,
+    "field": _h_field,
+    # KCUP 전용
+    "kcup_cover": _h_kcup_cover,
+    "kcup_box": _h_kcup_box,
+    "kcup_box_spacing": _h_kcup_box_spacing,
+    "kcup_o": _h_kcup_o,
+    "kcup_o_plain": _h_kcup_o_plain,
+    "kcup_o_heading": _h_kcup_o_heading,
+    "kcup_o_spacing": _h_kcup_o_spacing,
+    "kcup_o_heading_spacing": _h_kcup_o_heading_spacing,
+    "kcup_dash": _h_kcup_dash,
+    "kcup_dash_plain": _h_kcup_dash_plain,
+    "kcup_dash_spacing": _h_kcup_dash_spacing,
+    "kcup_numbered": _h_kcup_numbered,
+    "kcup_note": _h_kcup_note,
+    "kcup_attachment": _h_kcup_attachment,
+    "kcup_attachment_table": _h_kcup_attachment_table,
+    "kcup_pointer": _h_kcup_pointer,
+    "kcup_mixed_run": _h_kcup_mixed_run,
+}
+
+
+def register_block_handler(type_name: str, handler):
+    """외부에서 커스텀 블록 핸들러를 등록.
+
+    handler 시그니처: (idgen, item: dict, ctx: BuildContext) → list[Element]
+    """
+    BLOCK_HANDLERS[type_name] = handler
+
+
+def _build_item(idgen, item, body_width, template, registry=None,
+                prev_element=None):
     """단일 블록 아이템을 파싱해서 요소 리스트를 반환.
-    build_section의 dispatch 로직을 재사용 가능한 함수로 분리."""
+
+    BLOCK_HANDLERS 레지스트리 기반 dispatch. 미등록 타입은 text로 폴백.
+    """
     item_type = item.get("type", "text")
-    elements = []
+    handler = BLOCK_HANDLERS.get(item_type)
 
-    if item_type == "empty":
-        elements.append(make_empty(idgen))
+    if handler is None:
+        print(f"WARNING: unknown type '{item_type}', treating as text",
+              file=sys.stderr)
+        return [make_paragraph(idgen, text=item.get("text", ""))]
 
-    elif item_type in ("text", "paragraph"):
-        runs = build_runs(item)
-        cp = item.get("charPr", 0)
-        pp = item.get("paraPr", 0)
-        elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                        text=item.get("text"), runs=runs))
-
-    elif item_type == "heading":
-        level = item.get("level", 1)
-        dflt = HEADING_DEFAULTS.get(level, HEADING_DEFAULTS[1])
-        cp = item.get("charPr", dflt["charPr"])
-        pp = item.get("paraPr", dflt["paraPr"])
-        elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                        text=item.get("text", "")))
-
-    elif item_type == "bullet":
-        label = item.get("label", "•")
-        text = item.get("text", "")
-        full_text = f"{label} {text}"
-        pp = item.get("paraPr", 24)
-        cp = item.get("charPr", 0)
-        runs = build_runs(item)
-        if not runs:
-            elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                            text=full_text))
-        else:
-            elements.append(make_paragraph(idgen, paraPr=pp, runs=runs))
-
-    elif item_type == "numbered":
-        num = item.get("num", 1)
-        style = item.get("style", "circle")
-        text = item.get("text", "")
-        if style == "roman":
-            prefix = ROMAN[num - 1] if num <= len(ROMAN) else f"{num}."
-        elif style == "circle":
-            prefix = CIRCLE_NUMS[num - 1] if num <= len(CIRCLE_NUMS) else f"({num})"
-        elif style == "dot":
-            prefix = f"{num}."
-        elif style == "kcup":
-            prefix = f"□ {num}."
-        else:
-            prefix = f"{num}."
-        full_text = f"{prefix} {text}"
-        ns = NUMBERED_DEFAULTS.get(style, NUMBERED_DEFAULTS["circle"])
-        pp = item.get("paraPr", ns["paraPr"])
-        cp = item.get("charPr", ns["charPr"])
-        runs = build_runs(item)
-        if not runs:
-            elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                            text=full_text))
-        else:
-            elements.append(make_paragraph(idgen, paraPr=pp, runs=runs))
-
-    elif item_type == "indent":
-        label = item.get("label", "")
-        text = item.get("text", "")
-        full_text = f"{label}: {text}" if label else text
-        pp = item.get("paraPr", 25)
-        cp = item.get("charPr", 0)
-        elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                        text=full_text))
-
-    elif item_type == "note":
-        text = item.get("text", "")
-        full_text = f"※ {text}"
-        pp = item.get("paraPr", 0)
-        cp = item.get("charPr", 11)
-        elements.append(make_paragraph(idgen, paraPr=pp, charPr=cp,
-                                        text=full_text))
-
-    elif item_type == "table":
-        elements.append(make_table(idgen, item, body_width=body_width,
-                                    registry=registry))
-
-    elif item_type == "label_value":
-        elements.append(make_label_value(idgen, item, body_width=body_width,
-                                          registry=registry))
-
-    elif item_type == "signature":
-        for p in make_signature(idgen, item):
-            elements.append(p)
-
-    elif item_type == "pagebreak":
-        elements.append(make_paragraph(idgen, pageBreak="1"))
-
-    elif item_type == "image":
-        img_p, _img_info = make_image_paragraph(idgen, item,
-                                                  body_width=body_width)
-        elements.append(img_p)
-
-    elif item_type == "hyperlink":
-        elements.append(make_hyperlink_paragraph(idgen, item))
-
-    elif item_type in ("text_footnote", "text_endnote", "footnote"):
-        elements.append(make_text_with_footnote(idgen, item))
-
-    # ── KCUP 전용 타입 ────────────────────────────────
-    elif item_type == "kcup_cover":
-        elements.extend(make_kcup_cover(idgen, item))
-    elif item_type == "kcup_box":
-        elements.append(make_kcup_box(idgen, item))
-    elif item_type == "kcup_box_spacing":
-        elements.append(make_kcup_box_spacing(idgen, item))
-    elif item_type == "kcup_o":
-        elements.append(make_kcup_o(idgen, item))
-    elif item_type == "kcup_o_plain":
-        elements.append(make_kcup_o_plain(idgen, item))
-    elif item_type == "kcup_o_heading":
-        elements.append(make_kcup_o_heading(idgen, item))
-    elif item_type == "kcup_o_spacing":
-        elements.append(make_kcup_o_spacing(idgen, item))
-    elif item_type == "kcup_o_heading_spacing":
-        elements.append(make_kcup_o_heading_spacing(idgen, item))
-    elif item_type == "kcup_dash":
-        elements.append(make_kcup_dash(idgen, item))
-    elif item_type == "kcup_dash_plain":
-        elements.append(make_kcup_dash_plain(idgen, item))
-    elif item_type == "kcup_dash_spacing":
-        elements.append(make_kcup_dash_spacing(idgen, item))
-    elif item_type == "kcup_numbered":
-        elements.append(make_kcup_numbered(idgen, item))
-    elif item_type == "kcup_note":
-        elements.append(make_kcup_note(idgen, item))
-    elif item_type == "kcup_attachment":
-        elements.append(make_kcup_attachment(idgen, item))
-    elif item_type == "kcup_attachment_table":
-        elements.extend(make_kcup_attachment_table(idgen, item))
-    elif item_type == "kcup_pointer":
-        elements.append(make_kcup_pointer(idgen, item))
-    elif item_type == "kcup_mixed_run":
-        elements.append(make_kcup_mixed_run(idgen, item))
-
-    return elements
+    ctx = BuildContext(body_width=body_width, template=template,
+                       registry=registry)
+    ctx.prev_element = prev_element
+    return handler(idgen, item, ctx)
 
 
 def _fix_standalone(path) -> None:
