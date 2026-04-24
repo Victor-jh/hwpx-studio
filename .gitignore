@@ -24,3 +24,7 @@ pytest-cache-files-*/
 
 # OS
 .DS_Store
+.coverage
+dist/
+build/
+*.egg-info/

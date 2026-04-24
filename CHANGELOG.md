@@ -1,14 +1,44 @@
-# HWPX Skill CHANGELOG
+# Changelog
 
-## 현재 상태
-- 버전: v2.0.0 (Phase 2 — 읽기/편집 기능 구현)
-- Git: https://github.com/Victor-jh/hwpx-studio (Private)
-- Cowork 경로: ~/HWPX Skill Dev
-- 스크립트: build_hwpx.py, analyze_template.py, section_builder.py, create_document.py, property_registry.py, diff_docs.py, validate.py, page_guard.py, text_extract.py, **read_document.py**, **edit_document.py**, office/unpack.py, office/pack.py
-- 템플릿: base, gonmun, report, minutes, proposal, **kcup**
-- JSON 타입: 19 기본 + 16 KCUP 전용 = 35개
-- 동적 서식: charPr/paraPr/borderFill을 JSON dict로 인라인 지정 가능
-- **Phase 2**: HWPX → JSON 역변환 (read_document.py) + HWPX in-place 편집 (edit_document.py)
+All notable changes to hwpx-studio will be documented in this file.
+Format follows [Keep a Changelog](https://keepachangelog.com/).
+
+## [2.1.0] - 2026-04-24
+
+### Added
+- kordoc 하이브리드 연동 문서화 (CLAUDE.md 역할 분리, MCP 설정, 통합 워크플로우)
+- `_resolve_block_styles()` ID별 캐싱 — 동일 charPr/paraPr 반복 해석 제거
+- charPr 추가 속성 해석: shadeColor, strikeout, spacing
+- paraPr 추가 속성 해석: tabPrIDRef
+- 테스트 자체완결성 확보 — 외부 샘플 없이 100% 동작
+- Python 3.13 classifier 추가, pytest-cov 의존성 추가
+
+### Changed
+- `property_registry.py` `_spec_key()`: json.dumps → tuple 기반 해싱 (~10x 개선)
+- `section_builder.py` KCUP 매핑 모듈 캐시, 이미지 치수 캐시 추가
+- `build_hwpx.py` `write_xml()` 헬퍼 + standalone="yes" 자동 처리
+- `read_document.py` ZIP namelist 단일 패스 분류
+- `unpack.py` pretty_print 옵션 (기본 False, 속도 개선)
+- Development Status Alpha → Beta 승격
+
+### Fixed
+- Windows/한컴 Office standalone="yes" 누락 문제
+- rglob 이중 호출 제거 (build_hwpx.py 검증 루프)
+- `test_03_read_document.py` SAMPLE_FILES 빈 리스트 시 ValueError
+
+## [2.0.0] - 2026-04-08
+
+### Added
+- 테마 시스템 (PropertyRegistry 연결, CRUD, resolve_styles)
+- 테마 시스템 플러그인 (스킬 4개, 커맨드 7개)
+- HEADING_DEFAULTS, 레퍼런스 추가
+
+### Changed
+- 테스트 산출물 정리 (test_outputs/ 분리)
+
+---
+
+## Development History
 
 ## 2026-03-22 (Cowork 세션 #8) — Phase 2: HWPX 읽기/편집
 
