@@ -244,3 +244,31 @@ class TestReadSelfGenerated:
         data = json.loads(out.read_text(encoding="utf-8"))
         for i, block in enumerate(data["blocks"]):
             assert "type" in block, f"블록 [{i}]에 type 누락: {block}"
+
+    def test_heading_roundtrip(self, tmp_dir):
+        """heading 타입이 라운드트립에서 보존되는지 검증."""
+        blocks = [
+            {"type": "heading", "level": 1, "text": "1단계 제목"},
+            {"type": "heading", "level": 2, "text": "2단계 제목"},
+            {"type": "heading", "level": 3, "text": "3단계 제목"},
+            {"type": "paragraph", "text": "일반 본문"},
+        ]
+        hwpx = _create_test_hwpx(tmp_dir, "heading_rt", blocks)
+        result = subprocess.run(
+            READ_CMD + [str(hwpx)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        headings = [b for b in data["blocks"]
+                     if b.get("type") == "heading"]
+        assert len(headings) == 3, (
+            f"heading 3개 기대, {len(headings)}개 감지: "
+            f"{[b.get('type') for b in data['blocks']]}")
+        # level 보존 확인
+        levels = [h["level"] for h in headings]
+        assert levels == [1, 2, 3], f"level 불일치: {levels}"
+        # paragraph가 heading으로 오감지되지 않는지
+        texts = [b for b in data["blocks"]
+                  if b.get("type") in ("text", "paragraph")]
+        assert len(texts) >= 1, "paragraph가 사라짐"

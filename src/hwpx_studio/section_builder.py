@@ -2387,8 +2387,11 @@ def _make_custom_secpr(idgen, base_section_path, sec_opts):
                            "header":mm, "footer":mm}
       width: int        — 용지 폭 (HWPUNIT), 기본 A4
       height: int       — 용지 높이 (HWPUNIT), 기본 A4
+      columns: int|dict — 다단 설정 (int: 단수, dict: {count, gap, layout, same_width})
+      page_break: str   — 구역 나누기 종류 ("BOTH_COLUMN", "SECTION_COLUMN" 등)
     """
-    p = make_secpr_paragraph(idgen, base_section_path)
+    columns = sec_opts.get("columns")
+    p = make_secpr_paragraph(idgen, base_section_path, columns=columns)
 
     secpr = p.find(f".//{{{HP}}}secPr")
     if secpr is None:
@@ -2785,17 +2788,25 @@ def _write_images_sidecar(output_path):
 
 
 def _resolve_header_for_registry(template=None):
-    """템플릿 이름에서 header.xml 경로를 찾아 registry 초기화용으로 반환."""
-    SKILL_DIR = Path(__file__).resolve().parent.parent
-    TEMPLATES_DIR = SKILL_DIR / "templates"
+    """템플릿 이름에서 header.xml 경로를 찾아 registry 초기화용으로 반환.
 
-    if template:
-        candidate = TEMPLATES_DIR / template / "header.xml"
-        if candidate.exists():
-            return str(candidate)
-    base_header = TEMPLATES_DIR / "base" / "Contents" / "header.xml"
-    if base_header.exists():
-        return str(base_header)
+    패키지 모드(src/hwpx_studio/templates/)와 스킬 모드(../templates/) 양쪽 탐색.
+    """
+    # 패키지 모드: __file__의 sibling (src/hwpx_studio/templates/)
+    _PKG_TEMPLATES = Path(__file__).resolve().parent / "templates"
+    # 스킬 모드: __file__의 parent.parent (skill_dir/templates/)
+    _SKILL_TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
+
+    for tpl_dir in (_PKG_TEMPLATES, _SKILL_TEMPLATES):
+        if not tpl_dir.is_dir():
+            continue
+        if template:
+            candidate = tpl_dir / template / "header.xml"
+            if candidate.exists():
+                return str(candidate)
+        base_header = tpl_dir / "base" / "Contents" / "header.xml"
+        if base_header.exists():
+            return str(base_header)
     return None
 
 

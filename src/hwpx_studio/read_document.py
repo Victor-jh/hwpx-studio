@@ -820,8 +820,40 @@ def _parse_footnote(runs: list[dict], fn_el, note_type: str) -> dict:
 
 # ── 텍스트 기반 블록 타입 감지 ────────────────────────────────────
 
+def _detect_heading_by_spec(charPr: int, paraPr: int,
+                            style_registry: Optional["StyleRegistry"]) -> Optional[int]:
+    """StyleRegistry의 실제 charPr/paraPr spec으로 heading level 감지.
+
+    heading 판정 기준 (section_builder HEADING_DEFAULTS 기반):
+      level 1: height >= 2000 (20pt) + bold + align CENTER
+      level 2: height >= 1400 (14pt) + bold
+      level 3: height >= 1200 (12pt) + bold (기본 본문 1000보다 큰 경우)
+
+    Returns heading level (1-3) or None.
+    """
+    if style_registry is None:
+        return None
+
+    cp_spec = style_registry.get_charPr_spec(charPr)
+    if not cp_spec or not cp_spec.get("bold"):
+        return None
+
+    height = cp_spec.get("height", 1000)
+    pp_spec = style_registry.get_paraPr_spec(paraPr)
+    align = pp_spec.get("align", "JUSTIFY") if pp_spec else "JUSTIFY"
+
+    if height >= 2000 and align == "CENTER":
+        return 1
+    if height >= 1400:
+        return 2
+    if height >= 1200:
+        return 3
+    return None
+
+
 def _detect_text_block_type(p_el, runs: list[dict], full_text: str,
-                             paraPr: int, charPr: int) -> dict:
+                             paraPr: int, charPr: int,
+                             style_registry: Optional["StyleRegistry"] = None) -> dict:
     """paraPr/charPr + 텍스트 패턴으로 블록 타입 감지."""
 
     styleIDRef = p_el.get("styleIDRef", "0")
@@ -844,6 +876,7 @@ def _detect_text_block_type(p_el, runs: list[dict], full_text: str,
         return result
 
     # ── heading 감지 ──
+    # 1) 하드코딩 ID 매칭 (레거시 호환)
     heading_level = _HEADING_REVERSE.get((paraPr, charPr))
     if heading_level:
         return {"type": "heading", "level": heading_level, "text": full_text}
@@ -851,6 +884,11 @@ def _detect_text_block_type(p_el, runs: list[dict], full_text: str,
     # heading by charPr only (level 2: charPr=8, paraPr=0)
     if charPr == 8 and paraPr == 0:
         return {"type": "heading", "level": 2, "text": full_text}
+
+    # 2) StyleRegistry spec 기반 감지 (PropertyRegistry 동적 ID 대응)
+    spec_level = _detect_heading_by_spec(charPr, paraPr, style_registry)
+    if spec_level:
+        return {"type": "heading", "level": spec_level, "text": full_text}
 
     # ── KCUP 블록 감지 ──
     kcup_block = _detect_kcup_block(runs, full_text, paraPr, charPr)
@@ -1327,7 +1365,8 @@ class HWPXReader:
 
             # 텍스트 기반 블록 타입 감지
             block = _detect_text_block_type(p_el, runs, full_text,
-                                             paraPr, charPr)
+                                             paraPr, charPr,
+                                             style_registry=self.style_registry)
             blocks.append(block)
 
         blocks = _postprocess_kcup_cover(blocks)

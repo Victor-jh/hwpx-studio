@@ -11,6 +11,9 @@ ZIP 내부의 XML을 in-place로 편집하므로 스타일/서식/이미지 등�
     4. update_block   — 인덱스로 블록 수정
     5. reorder_blocks — 블록 순서 변경
     6. update_header_footer — 머리말/꼬리말 수정
+    7. move_block     — 블록 위치 이동
+    8. edit_table_cell — 표 셀 단위 텍스트 수정
+    9. get_table_info  — 표 구조 조회 (행/열/셀 텍스트)
 
 Usage:
     # 텍스트 찾아 바꾸기
@@ -434,6 +437,122 @@ class HWPXEditor:
         self._changes.append(f"update_{hf_type}: '{text[:50]}'")
         return True
 
+    def move_block(self, from_idx: int, to_idx: int,
+                   section_idx: int = 0) -> bool:
+        """블록을 from_idx에서 to_idx로 이동.
+
+        Args:
+            from_idx: 원본 위치 (콘텐츠 문단 인덱스)
+            to_idx: 대상 위치 (이동 후 인덱스)
+            section_idx: 대상 섹션
+        """
+        root, content_paras = self._get_content_paragraphs(section_idx)
+        n = len(content_paras)
+
+        if from_idx < 0 or from_idx >= n or to_idx < 0 or to_idx >= n:
+            print(f"WARNING: move_block indices out of range "
+                  f"(from={from_idx}, to={to_idx}, max={n - 1})",
+                  file=sys.stderr)
+            return False
+
+        if from_idx == to_idx:
+            return True
+
+        # reorder_blocks로 위임
+        order = list(range(n))
+        item = order.pop(from_idx)
+        order.insert(to_idx, item)
+        result = self.reorder_blocks(order, section_idx=section_idx)
+        if result:
+            self._changes[-1] = f"move_block: {from_idx} → {to_idx}"
+        return result
+
+    def get_table_info(self, block_index: int,
+                       section_idx: int = 0) -> dict | None:
+        """표 블록의 구조 정보(행수, 열수, 셀 텍스트)를 반환.
+
+        Returns:
+            {"rows": int, "cols": int, "cells": [[str, ...], ...]}
+            또는 None (표가 아닌 경우)
+        """
+        _, content_paras = self._get_content_paragraphs(section_idx)
+        if block_index < 0 or block_index >= len(content_paras):
+            return None
+
+        target = content_paras[block_index]
+        tbl = target.find(f".//{_hp('tbl')}")
+        if tbl is None:
+            return None
+
+        rows_data = []
+        for tr in tbl.findall(f".//{_hp('tr')}"):
+            row = []
+            for tc in tr.findall(_hp("tc")):
+                cell_texts = []
+                for t_elem in tc.iter(_hp("t")):
+                    if t_elem.text:
+                        cell_texts.append(t_elem.text)
+                row.append("".join(cell_texts))
+            rows_data.append(row)
+
+        return {
+            "rows": len(rows_data),
+            "cols": max(len(r) for r in rows_data) if rows_data else 0,
+            "cells": rows_data,
+        }
+
+    def edit_table_cell(self, block_index: int, row: int, col: int,
+                        new_text: str, section_idx: int = 0) -> bool:
+        """표의 특정 셀 텍스트를 수정 (서식 유지).
+
+        Args:
+            block_index: 표가 있는 콘텐츠 블록 인덱스
+            row: 행 인덱스 (0-based)
+            col: 열 인덱스 (0-based)
+            new_text: 새 텍스트
+        """
+        _, content_paras = self._get_content_paragraphs(section_idx)
+        if block_index < 0 or block_index >= len(content_paras):
+            return False
+
+        target = content_paras[block_index]
+        tbl = target.find(f".//{_hp('tbl')}")
+        if tbl is None:
+            print(f"WARNING: Block {block_index} is not a table",
+                  file=sys.stderr)
+            return False
+
+        trs = tbl.findall(f".//{_hp('tr')}")
+        if row < 0 or row >= len(trs):
+            print(f"WARNING: Row {row} out of range (0-{len(trs) - 1})",
+                  file=sys.stderr)
+            return False
+
+        tcs = trs[row].findall(_hp("tc"))
+        if col < 0 or col >= len(tcs):
+            print(f"WARNING: Col {col} out of range (0-{len(tcs) - 1})",
+                  file=sys.stderr)
+            return False
+
+        tc = tcs[col]
+        # 첫 번째 t 요소 수정 (나머지 t가 있으면 텍스트 비우기)
+        t_elems = list(tc.iter(_hp("t")))
+        if t_elems:
+            t_elems[0].text = new_text
+            for t in t_elems[1:]:
+                t.text = ""
+        else:
+            # t 요소가 없으면 run 안에 생성
+            run = tc.find(f".//{_hp('run')}")
+            if run is not None:
+                t = etree.SubElement(run, _hp("t"))
+                t.text = new_text
+
+        self._changes.append(
+            f"edit_table_cell: block={block_index}, "
+            f"cell=({row},{col}), text='{new_text[:30]}'")
+        return True
+
     def get_block_count(self, section_idx: int = 0) -> int:
         """콘텐츠 블록 수 반환."""
         _, content_paras = self._get_content_paragraphs(section_idx)
@@ -502,6 +621,23 @@ class HWPXEditor:
                 if self.reorder_blocks(op["order"], section_idx=sec):
                     success += 1
 
+            elif op_type == "move_block":
+                if self.move_block(op["from"], op["to"], section_idx=sec):
+                    success += 1
+
+            elif op_type == "edit_table_cell":
+                if self.edit_table_cell(
+                    op["block_index"], op["row"], op["col"],
+                    op["text"], section_idx=sec):
+                    success += 1
+
+            elif op_type == "get_table_info":
+                info = self.get_table_info(op["block_index"], section_idx=sec)
+                if info:
+                    self._changes.append(
+                        f"get_table_info: {info['rows']}×{info['cols']}")
+                    success += 1
+
             else:
                 print(f"WARNING: Unknown operation '{op_type}'",
                       file=sys.stderr)
@@ -528,6 +664,14 @@ def main():
     parser.add_argument("--insert-text", nargs=2,
                         metavar=("INDEX", "TEXT"),
                         help="텍스트 블록 삽입 (인덱스, 텍스트)")
+    parser.add_argument("--move-block", nargs=2, type=int,
+                        metavar=("FROM", "TO"),
+                        help="블록 이동 (��본 인덱스, 대상 인덱스)")
+    parser.add_argument("--edit-cell", nargs=4,
+                        metavar=("BLOCK", "ROW", "COL", "TEXT"),
+                        help="표 셀 편집 (블록���덱스, 행, 열, 텍스트)")
+    parser.add_argument("--table-info", type=int, metavar="BLOCK",
+                        help="표 구조 출력 (블록인덱스)")
 
     # JSON 편집 스크립트
     parser.add_argument("--edit-json", metavar="JSON_FILE",
@@ -552,6 +696,17 @@ def main():
         idx = int(args.insert_text[0])
         text = args.insert_text[1]
         editor.insert_block(idx, {"type": "text", "text": text})
+    if args.move_block:
+        editor.move_block(args.move_block[0], args.move_block[1])
+    if args.edit_cell:
+        b, r, c = int(args.edit_cell[0]), int(args.edit_cell[1]), int(args.edit_cell[2])
+        editor.edit_table_cell(b, r, c, args.edit_cell[3])
+    if args.table_info is not None:
+        info = editor.get_table_info(args.table_info)
+        if info:
+            print(json.dumps(info, ensure_ascii=False, indent=2))
+        else:
+            print(f"Block {args.table_info} is not a table", file=sys.stderr)
 
     # JSON 스크립트 실행
     if args.edit_json:

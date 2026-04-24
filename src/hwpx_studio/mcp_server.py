@@ -237,10 +237,15 @@ def hwpx_edit(
                 {"op": "replace", "old": "2024년", "new": "2025년"},
                 {"op": "replace_regex", "pattern": "\\d+월", "replacement": "3월"},
                 {"op": "insert", "index": 0, "block": {"type": "paragraph", "text": "추가 문단"}},
-                {"op": "delete", "index": 5}
+                {"op": "delete", "index": 5},
+                {"op": "move", "from": 3, "to": 0},
+                {"op": "edit_cell", "block_index": 2, "row": 1, "col": 0, "text": "수정된 셀"},
+                {"op": "update_text", "index": 1, "text": "변경된 텍스트"},
+                {"op": "update_block", "index": 1, "block": {"type": "heading", "level": 2, "text": "새 제목"}}
             ]
 
-    op 종류: replace(텍스트 치환), replace_regex(정규식), insert(블록 삽입), delete(블록 삭제)
+    op 종류: replace(텍스트 치환), replace_regex(정규식), insert(블록 삽입), delete(블록 삭제),
+             move(블록 이동), edit_cell(표 셀 편집), update_text(텍스트 수정), update_block(블록 교체)
     """
     if not Path(input_path).exists():
         return f"ERROR: 파일 없음 — {input_path}"
@@ -270,6 +275,24 @@ def hwpx_edit(
             elif op_type == "delete":
                 editor.delete_block(index=op_def["index"])
                 results.append(f"delete: index={op_def['index']}")
+            elif op_type == "move":
+                ok = editor.move_block(op_def["from"], op_def["to"])
+                results.append(f"move: {op_def['from']}→{op_def['to']}" if ok else "move: FAIL")
+            elif op_type == "edit_cell":
+                ok = editor.edit_table_cell(
+                    op_def["block_index"], op_def["row"], op_def["col"],
+                    op_def["text"])
+                results.append(
+                    f"edit_cell: ({op_def['row']},{op_def['col']})='{op_def['text'][:20]}'"
+                    if ok else "edit_cell: FAIL")
+            elif op_type == "update_text":
+                ok = editor.update_block_text(op_def["index"], op_def["text"])
+                results.append(
+                    f"update_text: index={op_def['index']}" if ok else "update_text: FAIL")
+            elif op_type == "update_block":
+                ok = editor.update_block(op_def["index"], op_def["block"])
+                results.append(
+                    f"update_block: index={op_def['index']}" if ok else "update_block: FAIL")
             else:
                 results.append(f"SKIP: 알 수 없는 op '{op_type}'")
 

@@ -11,7 +11,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import sys
+import zipfile
 from html import escape
 from pathlib import Path
 
@@ -101,6 +103,12 @@ table { border-collapse: collapse; width: 100%; margin: 10pt 0; font-size: 10.5p
 th, td { border: 1px solid #bbb; padding: 6pt 10pt; text-align: left; vertical-align: middle; }
 th { background: #e6e6e6; font-weight: 600; }
 tr:nth-child(even) td { background: #fafafa; }
+td.align-center, th.align-center { text-align: center; }
+td.align-right, th.align-right { text-align: right; }
+
+/* ── 이미지 ── */
+.image-block { text-align: center; margin: 10pt 0; }
+.image-block img { max-width: 100%; height: auto; border: 1px solid #e0e0e0; border-radius: 2px; }
 
 /* ── 링크/북마크/각주 ── */
 a { color: #1a6bc4; text-decoration: none; }
@@ -437,6 +445,16 @@ def _render_block(block: dict, footnotes: list) -> str:
         return f'<p>{text}<sup class="footnote-ref">[{idx}]</sup></p>'
 
     if btype == "image":
+        # base64 인라인 이미지 (image_data가 있으면 사용)
+        img_data = block.get("_image_data")
+        if img_data:
+            mime = img_data.get("mime", "image/png")
+            b64 = img_data.get("base64", "")
+            width = block.get("width_mm")
+            style = f' style="max-width:{width}mm"' if width else ""
+            return (f'<div class="image-block">'
+                    f'<img src="data:{mime};base64,{b64}"{style} alt="이미지">'
+                    f'</div>')
         alt = escape(block.get("alt", "이미지"))
         return f'<p><em>[{alt}]</em></p>'
 
@@ -445,22 +463,63 @@ def _render_block(block: dict, footnotes: list) -> str:
 
 
 def _render_table(block: dict) -> str:
-    """테이블 블록 → HTML table."""
+    """테이블 블록 → HTML table (colspan/rowspan/배경색 지원)."""
     rows = block.get("rows", [])
     if not rows:
         return ""
+
+    merge = block.get("merge", [])
+    # merge 맵: (row, col) → {colSpan, rowSpan}
+    merge_map: dict[tuple[int, int], dict] = {}
+    for m in merge:
+        merge_map[(m.get("row", 0), m.get("col", 0))] = m
+
+    # 병합으로 가려진 셀 추적
+    hidden: set[tuple[int, int]] = set()
+    for (mr, mc), m in merge_map.items():
+        cs = m.get("colSpan", 1)
+        rs = m.get("rowSpan", 1)
+        for dr in range(rs):
+            for dc in range(cs):
+                if dr == 0 and dc == 0:
+                    continue
+                hidden.add((mr + dr, mc + dc))
 
     html = ["<table>"]
 
     for i, row in enumerate(rows):
         html.append("<tr>")
-        for cell in row:
+        for j, cell in enumerate(row):
+            if (i, j) in hidden:
+                continue
+
             tag = "th" if i == 0 else "td"
+            attrs = []
+
+            # colspan / rowspan
+            mi = merge_map.get((i, j))
+            if mi:
+                cs = mi.get("colSpan", 1)
+                rs = mi.get("rowSpan", 1)
+                if cs > 1:
+                    attrs.append(f'colspan="{cs}"')
+                if rs > 1:
+                    attrs.append(f'rowspan="{rs}"')
+
+            # 셀 속성
             if isinstance(cell, dict):
                 cell_text = escape(str(cell.get("text", "")))
+                bg = cell.get("bg") or cell.get("background")
+                if bg:
+                    attrs.append(f'style="background:{bg}"')
+                align = cell.get("align")
+                if align:
+                    attrs.append(f'class="align-{align.lower()}"')
             else:
                 cell_text = escape(str(cell))
-            html.append(f"<{tag}>{cell_text}</{tag}>")
+
+            attr_str = (" " + " ".join(attrs)) if attrs else ""
+            html.append(f"<{tag}{attr_str}>{cell_text}</{tag}>")
         html.append("</tr>")
 
     html.append("</table>")
@@ -468,6 +527,36 @@ def _render_table(block: dict) -> str:
 
 
 # ── 메인 변환 ─────────────────────────────────────────────────────
+def _extract_images(hwpx_path: str) -> dict[str, dict]:
+    """HWPX ZIP에서 BinData 이미지를 base64로 추출.
+
+    Returns: {binaryItemIDRef: {"mime": str, "base64": str}}
+    """
+    images: dict[str, dict] = {}
+    ext_to_mime = {
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".gif": "image/gif", ".bmp": "image/bmp", ".svg": "image/svg+xml",
+        ".tif": "image/tiff", ".tiff": "image/tiff", ".webp": "image/webp",
+    }
+    try:
+        with zipfile.ZipFile(hwpx_path, "r") as zf:
+            for name in zf.namelist():
+                if "BinData/" not in name:
+                    continue
+                ext = Path(name).suffix.lower()
+                mime = ext_to_mime.get(ext)
+                if not mime:
+                    continue
+                data = zf.read(name)
+                b64 = base64.b64encode(data).decode("ascii")
+                # binaryItemIDRef는 보통 파일명(확장자 포함)
+                ref = Path(name).name
+                images[ref] = {"mime": mime, "base64": b64}
+    except Exception:
+        pass
+    return images
+
+
 def hwpx_to_html(hwpx_path: str) -> str:
     """HWPX 파일을 HTML 문자열로 변환."""
     reader = HWPXReader(hwpx_path)
@@ -479,6 +568,15 @@ def hwpx_to_html(hwpx_path: str) -> str:
         # 다중 섹션
         for sec in data.get("sections", []):
             blocks.extend(sec.get("blocks", []))
+
+    # 이미지 추출 및 블록에 주입
+    image_map = _extract_images(hwpx_path)
+    if image_map:
+        for block in blocks:
+            if block.get("type") == "image":
+                ref = block.get("binaryItemIDRef", "")
+                if ref in image_map:
+                    block["_image_data"] = image_map[ref]
 
     # KCUP 감지
     is_kcup = any(b.get("type", "").startswith("kcup_") for b in blocks)
