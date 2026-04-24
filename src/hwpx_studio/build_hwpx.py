@@ -46,8 +46,6 @@ def _fix_xml_declaration(xml_bytes: bytes) -> bytes:
     경우가 있으므로, 원본 HWPX 형식과 호환되도록 보정한다.
     """
     # <?xml version='1.0' encoding='UTF-8'?>  →  <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
-    def _replace(m):
-        return '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>'
     return _re.sub(
         rb"""<\?xml\s+version=['"]([\d.]+)['"]\s+encoding=['"]([^'"]+)['"]\s*\??>""",
         lambda m: b'<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>',

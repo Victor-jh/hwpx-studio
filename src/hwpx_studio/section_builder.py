@@ -14,11 +14,12 @@ COWORK_CONTEXT.md 섹션 6 스펙 기반 재작성 + KCUP 팀장 대응용 스�
   field (날짜/쪽번호/전체쪽수 필드),
   signature, label_value, pagebreak
 
-KCUP 전용 타입 (16):
-  kcup_box, kcup_box_spacing,
+KCUP 전용 타입 (18):
+  kcup_cover, kcup_box, kcup_box_spacing,
   kcup_o, kcup_o_plain, kcup_o_heading, kcup_o_spacing, kcup_o_heading_spacing,
   kcup_dash, kcup_dash_plain, kcup_dash_spacing,
-  kcup_numbered, kcup_note, kcup_attachment, kcup_pointer, kcup_mixed_run
+  kcup_numbered, kcup_note, kcup_attachment, kcup_attachment_table,
+  kcup_pointer, kcup_mixed_run
 """
 
 import argparse
@@ -2746,7 +2747,11 @@ def _build_item(idgen, item, body_width, template, registry=None,
 
 
 def _fix_standalone(path) -> None:
-    """XML 파일의 선언에 standalone='yes'를 추가 (한컴 오피스 호환)."""
+    """XML 파일의 선언에 standalone='yes'를 추가 (한컴 오피스 호환).
+
+    build_hwpx.py의 _fix_xml_declaration()와 동일 로직.
+    section_builder는 독립 실행(CLI)도 지원하므로 자체 구현 유지.
+    """
     import re as _re_local
     p = Path(path)
     if not p.is_file():
