@@ -429,10 +429,15 @@ def build(
                   f"+{stats['new_borderFill']} borderFill, "
                   f"+{stats['new_fonts']} fonts", file=sys.stderr)
 
-        # 6. Validate all XML/HPF files (단일 패스)
+        # 6. Validate all XML/HPF files + standalone="yes" 보장 (단일 ��스)
         for f in work.rglob("*"):
             if f.is_file() and f.suffix in (".xml", ".hpf"):
                 validate_xml(f)
+                # 한컴 오피스 호환: 모든 XML에 standalone="yes" 보장
+                raw = f.read_bytes()
+                fixed = _fix_xml_declaration(raw)
+                if fixed != raw:
+                    f.write_bytes(fixed)
 
         # 7. Pack
         pack_hwpx(work, output)

@@ -20,7 +20,10 @@ LLM이 JSON에서 인라인으로 지정한 서식 스펙을 동적으로 header
 
 from __future__ import annotations
 
+import logging
 from lxml import etree
+
+logger = logging.getLogger(__name__)
 
 # ── 네임스페이스 ────────────────────────────────────────────────
 HH = "http://www.hancom.co.kr/hwpml/2011/head"
@@ -123,14 +126,26 @@ class PropertyRegistry:
     새로운 스펙이 요청될 때 다음 ID를 할당하고 XML 엔트리를 생성.
     """
 
+    # header_path 없을 때 사용하는 안전 시작 ID.
+    # 대부분의 base 템플릿은 charPr 0~9, paraPr 0~9, borderFill 1~5 범위를 사용.
+    # 100부터 시작하면 템플릿 기본 엔트리와 충돌할 가능성이 사실상 없음.
+    _SAFE_START_ID = 100
+
     def __init__(self, header_path: str | None = None):
         """기존 header.xml을 파싱하여 현재 ID 상태를 로드.
 
-        header_path가 None이면 기본값 (base template 기준) 사용.
+        header_path가 None이면 안전한 시작 ID(_SAFE_START_ID=100)를 사용하여
+        템플릿 기본 엔트리와의 ID 충돌을 방지.
         """
-        self._charpr_next_id: int = 0
-        self._parapr_next_id: int = 0
-        self._borderfill_next_id: int = 0
+        # Layer 1: header_path 없으면 안전한 시작 ID 사용
+        _start = self._SAFE_START_ID if header_path is None else 0
+        if header_path is None:
+            logger.warning(
+                "PropertyRegistry: header_path=None → 시작 ID=%d "
+                "(템플릿 충돌 방지 모드)", _start)
+        self._charpr_next_id: int = _start
+        self._parapr_next_id: int = _start
+        self._borderfill_next_id: int = _start
         self._font_next_id: dict[str, int] = {}  # lang → next_id
 
         # 동적으로 생성된 엔트리들
@@ -390,16 +405,79 @@ class PropertyRegistry:
         return bool(self._new_charprs or self._new_paraprs or
                      self._new_borderfills or self._new_fonts)
 
+    @staticmethod
+    def _collect_existing_ids(
+        root: etree._Element,
+        container_tag: str,
+        item_tag: str,
+    ) -> set[int]:
+        """header.xml에서 특정 컨테이너의 기존 ID 집합을 수집."""
+        container = root.find(f".//{_hh(container_tag)}")
+        if container is None:
+            return set()
+        return {
+            int(el.get("id", "0"))
+            for el in container.findall(_hh(item_tag))
+        }
+
+    @staticmethod
+    def _remap_collisions(
+        entries: list[tuple[int, dict]],
+        existing_ids: set[int],
+        label: str,
+    ) -> tuple[list[tuple[int, dict]], dict[int, int]]:
+        """충돌하는 ID를 자동 재할당.
+
+        Returns:
+            (remapped_entries, old_to_new_map)
+        """
+        if not entries or not existing_ids:
+            return entries, {}
+
+        # 전체 사용 중 ID = 기존 + 새로 할당할 것들 전체
+        used = set(existing_ids)
+        remap: dict[int, int] = {}
+        result: list[tuple[int, dict]] = []
+
+        for old_id, spec in entries:
+            if old_id in existing_ids:
+                # 충돌 → 새 ID 할당 (used 집합 바깥에서 찾기)
+                new_id = max(used) + 1 if used else 0
+                remap[old_id] = new_id
+                logger.warning(
+                    "PropertyRegistry: %s ID 충돌 감지 — "
+                    "id=%d → id=%d로 재할당", label, old_id, new_id)
+                used.add(new_id)
+                result.append((new_id, spec))
+            else:
+                used.add(old_id)
+                result.append((old_id, spec))
+
+        return result, remap
+
     def apply(self, header_path: str) -> None:
-        """동적 엔트리들을 header.xml에 삽입하고 itemCnt 갱신."""
+        """동적 엔트리들을 header.xml에 삽입하고 itemCnt 갱신.
+
+        Layer 2: 삽입 전 기존 ID 스캔 → 충돌 시 자동 재할당.
+        """
         if not self.has_changes():
             return
 
         tree = etree.parse(header_path)
         root = tree.getroot()
 
-        # ── borderFills 삽입 ──
+        # ── Layer 2: 기존 ID 수집 ──
+        existing_bf_ids = self._collect_existing_ids(
+            root, "borderFills", "borderFill")
+        existing_cp_ids = self._collect_existing_ids(
+            root, "charProperties", "charPr")
+        existing_pp_ids = self._collect_existing_ids(
+            root, "paraProperties", "paraPr")
+
+        # ── borderFills 삽입 (충돌 검사) ──
         if self._new_borderfills:
+            self._new_borderfills, _ = self._remap_collisions(
+                self._new_borderfills, existing_bf_ids, "borderFill")
             bf_container = root.find(f".//{_hh('borderFills')}")
             if bf_container is not None:
                 for bf_id, spec in self._new_borderfills:
@@ -408,8 +486,10 @@ class PropertyRegistry:
                 bf_container.set("itemCnt",
                                   str(len(bf_container.findall(_hh("borderFill")))))
 
-        # ── charProperties 삽입 ──
+        # ── charProperties 삽입 (충돌 검사) ──
         if self._new_charprs:
+            self._new_charprs, _ = self._remap_collisions(
+                self._new_charprs, existing_cp_ids, "charPr")
             cp_container = root.find(f".//{_hh('charProperties')}")
             if cp_container is not None:
                 for cp_id, spec in self._new_charprs:
@@ -418,8 +498,10 @@ class PropertyRegistry:
                 cp_container.set("itemCnt",
                                   str(len(cp_container.findall(_hh("charPr")))))
 
-        # ── paraProperties 삽입 ──
+        # ── paraProperties 삽입 (충돌 검사) ──
         if self._new_paraprs:
+            self._new_paraprs, _ = self._remap_collisions(
+                self._new_paraprs, existing_pp_ids, "paraPr")
             pp_container = root.find(f".//{_hh('paraProperties')}")
             if pp_container is not None:
                 for pp_id, spec in self._new_paraprs:
